@@ -42,7 +42,7 @@ select{max-width:210px}
 .msg{color:#c00;margin-top:8px;white-space:pre-line}
 .leg{font-size:11px;color:#555;margin-bottom:6px}
 .mode{font-size:11px;padding:2px 8px;border:1px solid #999;border-radius:10px;color:#333;margin-left:8px;vertical-align:middle;font-weight:400}
-#info,#info2{color:#555}
+#info,#info2,#info3{color:#555}
 </style>
 </head>
 <body>
@@ -57,7 +57,12 @@ select{max-width:210px}
  <div class="row">
   <span class="lbl">Ürün listesi</span>
   <span id="info2">Yükleniyor...</span>
-  <button class="rm" id="xA" onclick="clearArt()" title="Sistemdeki ürün listesini ve tarayıcıdaki kopyasını kaldırır">Ürün listesini kaldır</button>
+  <button class="rm" id="xA" onclick="clearBig('A')" title="Sistemdeki ürün listesini ve tarayıcıdaki kopyasını kaldırır">Ürün listesini kaldır</button>
+ </div>
+ <div class="row">
+  <span class="lbl">Firma listesi</span>
+  <span id="info3">Yükleniyor...</span>
+  <button class="rm" id="xC" onclick="clearBig('C')" title="Sistemdeki firma listesini ve tarayıcıdaki kopyasını kaldırır">Firma listesini kaldır</button>
  </div>
  <div class="row">
   <label class="file" title="Lookup dosyaları; birden fazla seçilebilir">Lookup dosyasını yükle<input type="file" id="lf" accept=".csv,.txt" multiple></label>
@@ -73,6 +78,7 @@ select{max-width:210px}
 <div class="tabs">
  <button id="tab_p5" class="on" onclick="showTab('p5')">Ürün Kartı</button>
  <button id="tab_p8" onclick="showTab('p8')">Ürün Ölçü Kartı</button>
+ <button id="tab_p7" onclick="showTab('p7')">Firma Kartı</button>
 </div>
 
 <div class="pane on" id="pane_p5">
@@ -110,6 +116,23 @@ select{max-width:210px}
  <div class="msg" id="msg_p8"></div>
 </div>
 
+<div class="pane" id="pane_p7">
+ <div class="bar">
+  <label class="file x" title="Başlıklı Excel/CSV; başlıklar alan adlarıyla aynı olmalı (COMPANY_CODE, COMPANY_NAME_1, COMPANY_ADDRESS_1 ...). Dosyada olan kolonlar okunur.">Excel'den firma yükle<input type="file" accept=".xlsx,.xls,.csv,.txt" onchange="importExcel('p7',this)"></label>
+  <button onclick="applyFirst('p7')" title="Firma tipi, e-fatura, şirket tipi, ülke, il, ilçe, vergi dairesi ve fatura carisi; yalnız boş hücrelere kopyalanır">İlk satırı tüm satırlara uygula</button>
+  <button onclick="addRow('p7')">+ Satır ekle</button>
+  <button onclick="copyLast('p7')">Son satırı kopyala</button>
+  <button class="p" onclick="download('p7','txt')">Dosya indir (.txt)</button>
+  <button class="p" onclick="download('p7','xlsx')">Excel indir</button>
+  <span id="cnt_p7"></span>
+ </div>
+ <div class="leg">Tüm alanlar Excel'den yüklenebilir (başlık = alan adı). Firma kodu, unvan ve adres zorunlu: unvan ya da adres boş gelirse sistem kaydı ekleyemez. İl kodu dosyaya yazılır ama sistemde hiçbir alana aktarılmaz. Sistemde zaten olan firma kodu sarı işaretlenir.</div>
+ <div class="wrap"><table><thead><tr id="hd_p7"></tr></thead><tbody id="tb_p7"></tbody></table></div>
+ <div class="ok" id="ok_p7"></div>
+ <div class="wm" id="wm_p7"></div>
+ <div class="msg" id="msg_p7"></div>
+</div>
+
 <datalist id="dl_ARTICLE"></datalist>
 
 <script>
@@ -121,24 +144,30 @@ select{max-width:210px}
 const MOD="ALLP";
 const ORG="";
 const HEADER_ROW=true;   // indirilen .txt dosyasının ilk satırına kolon başlıkları yazılsın mı
+/* Firma tipi (VC_FLAG) seçenekleri – açıklamalar operasyondan teyit edilince doldurulacak */
+const VCF=[["1",""],["4",""],["5",""],["6",""],["9",""]];
 /* ===================================================================== */
 
 const IS_C=MOD==="ALLC";
-const DTR={p5:MOD+"105",p8:MOD+"108"};          // dosya adında kullanılır
-const NM={p5:"Ürün Kartı",p8:"Ürün Ölçü Kartı"};
+const DTR={p5:MOD+"105",p8:MOD+"108",p7:MOD+"007"};   // dosya adında kullanılır
+const NM={p5:"Ürün Kartı",p8:"Ürün Ölçü Kartı",p7:"Firma Kartı"};
 /* Otomatik okunacak lookup dosyaları (HTML ile aynı klasörde). Her grupta ilk bulunan okunur. */
 const SRC=IS_C
- ?{L:["YS19_Lookup_"+ORG+".csv","Lookup_"+ORG+".csv"],A:[]}
- :{L:["Lookup_Listeleri.csv","YS19_Lookup_Listeleri.csv"],A:["AMI_lookup.csv","YS19_Lookup_AMI.csv"]};
+ ?{L:["YS19_Lookup_"+ORG+".csv","Lookup_"+ORG+".csv"],A:[],C:[]}
+ :{L:["Lookup_Listeleri.csv","YS19_Lookup_Listeleri.csv"],A:["AMI_lookup.csv","YS19_Lookup_AMI.csv"],C:["VCMI_lookup.csv","YS19_Lookup_VCMI.csv"]};
 const KEY="ys19_dtr_lookup_"+MOD+"_"+(ORG||"ALL");
-const AKEY=KEY+"_ami";
-const NOL=KEY+"_kaldirildi_liste", NOA=KEY+"_kaldirildi_urun";
+const NOL=KEY+"_kaldirildi_liste";
 
 const PTS=[["0","ÜTS Dışı"],["1","Lotlu Ürün"],["2","Serili Ürün"]];
 const DDO=[["0","Karekodsuz"],["1","Karekodlu"]];
+const EFT=[["0","Hayır"],["1","Evet"]];
 let DATA={};
-const ART={};
-let ARTOK=false, ASTAMP="";
+/* Büyük listeler: A = ürün (AMI), C = firma (VCMI); proje -> Map(kod -> açıklama) */
+const BIG={
+ A:{obj:{},key:KEY+"_ami",no:KEY+"_kaldirildi_urun",stamp:"",ok:false,el:"info2",btn:"xA",unit:"ürün",name:"Ürün listesi",use:"ürün kontrolü ve ürün önerisi"},
+ C:{obj:{},key:KEY+"_vcmi",no:KEY+"_kaldirildi_firma",stamp:"",ok:false,el:"info3",btn:"xC",unit:"firma",name:"Firma listesi",use:"mevcut firma kontrolü"}};
+const ART=BIG.A.obj, CMP=BIG.C.obj;
+let ARTOK=false, CMPOK=false;
 
 const T={
  p5:{uniq:["ARTICLE_CODE"],clear:["ARTICLE_CODE","ARTICLE_DESCRIPTION","OLD_ARTICLE_CODE","GTIN"],
@@ -175,24 +204,50 @@ const T={
   {k:"LENGTH",tr:"Uzunluk (Boy)",t:"dec",c:"n",max:13},
   {k:"WIDTH",tr:"Genişlik (En)",t:"dec",c:"n",max:13},
   {k:"HEIGHT",tr:"Yükseklik",t:"dec",c:"n",max:13},
-  {k:"WEIGHT",tr:"Brüt Ağırlık",t:"dec",c:"n",max:13}]}
+  {k:"WEIGHT",tr:"Brüt Ağırlık",t:"dec",c:"n",max:13}]},
+ /* Firma Kartı – sıra WMS_INT.VDTR020_ALLP007 ile aynı (1. alan IORG_CODE indirirken eklenir) */
+ p7:{uniq:["COMPANY_CODE"],
+  clear:["COMPANY_CODE","COMPANY_NAME_1","BRANCH_DEFINITION","DISPLAY_NAME","POSTAL_CODE","COMPANY_ADDRESS_1","COMPANY_GLN","SHIP_TO_GLN","TAX_NUMBER","TELEPHONE_1"],
+  apply:["INVOICE_COMPANY_CODE","VC_FLAG","CITY_CODE","CITY","TAX_ADDRESS","E_INVOICE","COMPANY_TYPE","COUNTRY_CODE","DISTRICT"],
+  xl:null,cols:[
+  {k:"COMPANY_CODE",tr:"Firma Kodu",t:"text",c:"t",req:1,max:20},
+  {k:"INVOICE_COMPANY_CODE",tr:"Fatura Firma Kodu",t:"text",c:"t",max:20},
+  {k:"VC_FLAG",tr:"Firma Tipi",t:"sel",fix:VCF,req:1,max:1},
+  {k:"COMPANY_NAME_1",tr:"Unvan",t:"text",c:"d",req:1,max:100,note:"Boş gelirse sistem kaydı ekleyemez"},
+  {k:"BRANCH_DEFINITION",tr:"Şube Tanımı",t:"text",c:"t",max:100},
+  {k:"DISPLAY_NAME",tr:"Görünen Ad",t:"text",c:"d",max:100},
+  {k:"CITY_CODE",tr:"İl Kodu",t:"text",c:"s",note:"Sistemde hiçbir alana aktarılmaz"},
+  {k:"CITY",tr:"İl",t:"text",c:"t",max:40},
+  {k:"POSTAL_CODE",tr:"Posta Kodu",t:"text",c:"s",max:21},
+  {k:"COMPANY_ADDRESS_1",tr:"Adres",t:"text",c:"d",req:1,max:200,note:"Boş gelirse sistem kaydı ekleyemez"},
+  {k:"COMPANY_GLN",tr:"Firma GLN",t:"text",c:"t",max:100},
+  {k:"SHIP_TO_GLN",tr:"Teslim GLN",t:"text",c:"t",max:20},
+  {k:"TAX_ADDRESS",tr:"Vergi Dairesi",t:"text",c:"t",max:30},
+  {k:"TAX_NUMBER",tr:"Vergi No",t:"text",c:"t",max:20},
+  {k:"TELEPHONE_1",tr:"Telefon",t:"text",c:"t",max:30},
+  {k:"E_INVOICE",tr:"E-Fatura",t:"sel",fix:EFT,max:1},
+  {k:"COMPANY_TYPE",tr:"Şirket Tipi",t:"text",c:"t",max:20},
+  {k:"COUNTRY_CODE",tr:"Ülke",t:"sel",l:"COUNTRY",max:3,df:"TR"},
+  {k:"DISTRICT",tr:"İlçe",t:"text",c:"t",max:40}]}
 };
-const TABS=["p5","p8"];
+T.p7.xl=Object.fromEntries(T.p7.cols.map(c=>[c.k,c.k]));
+const TABS=["p5","p8","p7"];
 const esc=s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const $=id=>document.getElementById(id);
-const orgSel=$("org"),info=$("info"),info2=$("info2");
+const orgSel=$("org"),info=$("info");
 const isXL=(t,k)=>Object.values(T[t].xl).includes(k);
 const curOrg=()=>IS_C?ORG:orgSel.value;
 const artMap=()=>ART[curOrg()]||new Map();
+const cmpMap=()=>CMP[curOrg()]||new Map();
 const normArt=s=>String(s||"").trim().replace(/^0+/,"");
 const now=()=>new Date().toLocaleString("tr-TR");
 
 $("modeTag").textContent=IS_C?"Müşteri sürümü":"Operasyon sürümü";
 document.title="WMS Sağlık – Quadronet Dosya Update"+(IS_C?" – "+ORG:"");
 if(IS_C){$("orgBox").style.display="none";}
-$("srcNote").textContent="Otomatik okunan: "+[...SRC.L,...SRC.A].join(", ");
+$("srcNote").textContent="Otomatik okunan: "+[...SRC.L,...SRC.A,...SRC.C].join(", ");
 
-/* ---------- Tarayıcı saklama (ürün listesi büyük olduğu için IndexedDB) ---------- */
+/* ---------- Tarayıcı saklama (büyük listeler için IndexedDB) ---------- */
 const IDB={db:null,
  open(){if(this.db)return Promise.resolve(this.db);
   return new Promise((res,rej)=>{if(!window.indexedDB){rej("IndexedDB yok");return;}
@@ -205,9 +260,9 @@ const IDB={db:null,
  get(k){return this.run("readonly",s=>s.get(k));},
  set(k,v){return this.run("readwrite",s=>s.put(v,k));},
  del(k){return this.run("readwrite",s=>s.delete(k));}};
-const artToObj=A=>Object.fromEntries(Object.entries(A).map(([o,m])=>[o,[...m]]));
-const objToArt=o=>Object.fromEntries(Object.entries(o||{}).map(([k,v])=>[k,new Map(v)]));
-function setArt(A){Object.keys(ART).forEach(k=>delete ART[k]);Object.assign(ART,A);}
+const mapToObj=A=>Object.fromEntries(Object.entries(A).map(([o,m])=>[o,[...m]]));
+const objToMap=o=>Object.fromEntries(Object.entries(o||{}).map(([k,v])=>[k,new Map(v)]));
+function setBig(id,X){const o=BIG[id].obj;Object.keys(o).forEach(k=>delete o[k]);Object.assign(o,X);}
 
 function showTab(t){TABS.forEach(x=>{$("tab_"+x).classList.toggle("on",x===t);$("pane_"+x).classList.toggle("on",x===t);});}
 
@@ -240,12 +295,16 @@ function parseCSV(t){
  if(f!==""||row.length){row.push(f);rows.push(row);}
  return rows;}
 
-/* D: küçük listeler, A: ürün listesi (org -> Map) */
-function ingest(rows,D,A){
+/* D: küçük listeler, A: ürün listesi, C: firma listesi (proje -> Map)
+   Kabul edilen biçimler:
+   1) ORG_CODE;LISTE;KOD;ACIKLAMA  (LISTE=ARTICLE -> ürün, LISTE=VCMI/COMPANY -> firma, diğerleri liste)
+   2) ORG_CODE;ARTICLE_CODE;ARTICLE_DESCRIPTION  (ürün)
+   3) ORG_CODE;COMPANY_CODE;DISPLAY_NAME  (firma) */
+function ingest(rows,D,A,C){
  const h=rows[0].map(x=>x.trim().toUpperCase());
  const iO=h.indexOf("ORG_CODE"),iL=h.indexOf("LISTE"),iK=h.indexOf("KOD"),iA=h.indexOf("ACIKLAMA");
  if(![iO,iL,iK,iA].includes(-1)){
-  let small=0,art=0;const gen=D.__gen||(D.__gen=[]);
+  let small=0,art=0,cmp=0;const gen=D.__gen||(D.__gen=[]);
   for(let i=1;i<rows.length;i++){const r=rows[i];if(r.length<4)continue;
    const o=(r[iO]||"").trim(),l=(r[iL]||"").trim(),k=r[iK]??"",a=(r[iA]||"").trim();
    if(!l)continue;
@@ -253,22 +312,22 @@ function ingest(rows,D,A){
    if(!o)continue;
    if(IS_C&&o!==ORG)continue;
    if(l==="ARTICLE"){(A[o]=A[o]||new Map()).set(String(k).trim(),a);art++;continue;}
+   if(l==="VCMI"||l==="COMPANY"){(C[o]=C[o]||new Map()).set(String(k).trim(),a);cmp++;continue;}
    D[o]=D[o]||{name:""};
    if(l==="ORG"){D[o].name=a;small++;continue;}
    (D[o][l]=D[o][l]||[]).push([k,a]);small++;}
-  return {small,art};
+  return {small,art,cmp};
  }
- const iAC=h.indexOf("ARTICLE_CODE"),iAD=h.indexOf("ARTICLE_DESCRIPTION");
- if(iO!==-1&&iAC!==-1){
-  let art=0;
+ const direct=(codeCol,descCols,X)=>{const iC=h.indexOf(codeCol);if(iO===-1||iC===-1)return -1;
+  const iD=descCols.map(c=>h.indexOf(c)).find(x=>x!==-1);let n=0;
   for(let i=1;i<rows.length;i++){const r=rows[i];
-   const o=(r[iO]||"").trim(),k=(r[iAC]||"").trim(),a=iAD!==-1?(r[iAD]||"").trim():"";
-   if(!o||!k)continue;
-   if(IS_C&&o!==ORG)continue;
-   (A[o]=A[o]||new Map()).set(k,a);art++;}
-  return {small:0,art};
- }
- throw "Dosyada beklenen kolonlar (ORG_CODE, LISTE, KOD, ACIKLAMA veya ORG_CODE, ARTICLE_CODE) bulunamadı.";}
+   const o=(r[iO]||"").trim(),k=(r[iC]||"").trim(),a=iD!==undefined?(r[iD]||"").trim():"";
+   if(!o||!k)continue;if(IS_C&&o!==ORG)continue;
+   (X[o]=X[o]||new Map()).set(k,a);n++;}
+  return n;};
+ const na=direct("ARTICLE_CODE",["ARTICLE_DESCRIPTION"],A);if(na!==-1)return {small:0,art:na,cmp:0};
+ const nc=direct("COMPANY_CODE",["DISPLAY_NAME","COMPANY_NAME_1"],C);if(nc!==-1)return {small:0,art:0,cmp:nc};
+ throw "Dosyada beklenen kolonlar bulunamadı (ORG_CODE, LISTE, KOD, ACIKLAMA ya da ORG_CODE, ARTICLE_CODE ya da ORG_CODE, COMPANY_CODE).";}
 
 function finish(D){
  const gen=D.__gen||[];delete D.__gen;
@@ -293,11 +352,13 @@ function applyData(D,stamp,state){
  $("xL").disabled=!n;
  refreshOrg();}
 
-function artInfo(){const n=Object.values(ART).reduce((s,m)=>s+m.size,0);
- ARTOK=n>0;
- info2.textContent=ARTOK?`Yüklü: ${n.toLocaleString("tr-TR")} ürün (${ASTAMP})`
-  :(ASTAMP==="kaldirildi"?"Ürün listesi kaldırıldı (ürün kontrolü yapılmaz).":"Yüklü değil (ürün kontrolü yapılmaz).");
- $("xA").disabled=!ARTOK;
+function bigInfo(){
+ ["A","C"].forEach(id=>{const b=BIG[id],n=Object.values(b.obj).reduce((s,m)=>s+m.size,0);
+  b.ok=n>0;
+  $(b.el).textContent=b.ok?`Yüklü: ${n.toLocaleString("tr-TR")} ${b.unit} (${b.stamp})`
+   :(b.stamp==="kaldirildi"?`${b.name} kaldırıldı (${b.use} yapılmaz).`:`Yüklü değil (${b.use} yapılmaz).`);
+  $(b.btn).disabled=!b.ok;});
+ ARTOK=BIG.A.ok;CMPOK=BIG.C.ok;
  refreshLk();}
 
 const decode=buf=>{let t=new TextDecoder("utf-8").decode(buf);if(t.includes("�"))t=new TextDecoder("windows-1254").decode(buf);return t;};
@@ -312,53 +373,59 @@ async function fetchFirst(names){
 /* Sayfa açılınca: HTML ile aynı yerdeki dosyaları okur; okuyamazsa tarayıcıdaki son kopyayı kullanır.
    force=true: 'Otomatik yükle' butonu – kaldırılmış listeleri de yeniden yükler. */
 async function loadDefault(force){
- if(force){localStorage.removeItem(NOL);localStorage.removeItem(NOA);}
- const noL=!!localStorage.getItem(NOL),noA=!!localStorage.getItem(NOA);
- info.textContent="Yükleniyor...";info2.textContent="Yükleniyor...";
- const D={},A={};let small=0,art=0,lName="",aName="";
- if(!(noL&&noA)){
-  const fl=await fetchFirst(SRC.L);
-  if(fl){try{const r=ingest(parseCSV(fl.text),D,A);small+=r.small;art+=r.art;if(r.small)lName=fl.name;if(r.art)aName=fl.name;}catch(e){}}
-  if(!noA&&SRC.A.length){
-   const fa=await fetchFirst(SRC.A);
-   if(fa){try{const r=ingest(parseCSV(fa.text),{},A);art+=r.art;if(r.art)aName=aName?aName+", "+fa.name:fa.name;}catch(e){}}
+ if(force){localStorage.removeItem(NOL);localStorage.removeItem(BIG.A.no);localStorage.removeItem(BIG.C.no);}
+ const noL=!!localStorage.getItem(NOL),noB={A:!!localStorage.getItem(BIG.A.no),C:!!localStorage.getItem(BIG.C.no)};
+ info.textContent="Yükleniyor...";$("info2").textContent="Yükleniyor...";$("info3").textContent="Yükleniyor...";
+ const D={},X={A:{},C:{}},cnt={small:0,A:0,C:0},nm={L:"",A:"",C:""};
+ const ing=(f,DD)=>{const r=ingest(parseCSV(f.text),DD,X.A,X.C);
+  cnt.small+=r.small;cnt.A+=r.art;cnt.C+=r.cmp;
+  if(r.small)nm.L=f.name;if(r.art)nm.A=(nm.A?nm.A+", ":"")+f.name;if(r.cmp)nm.C=(nm.C?nm.C+", ":"")+f.name;};
+ if(!(noL&&noB.A&&noB.C)){
+  const fl=await fetchFirst(SRC.L);if(fl){try{ing(fl,D);}catch(e){}}
+  for(const id of ["A","C"]){
+   if(noB[id]||!SRC[id].length)continue;
+   const f=await fetchFirst(SRC[id]);if(f){try{ing(f,{});}catch(e){}}
   }
  }
  /* listeler */
  if(noL){applyData({},"","kaldirildi");}
- else if(small){finish(D);const stamp=lName+" – otomatik, "+now();
+ else if(cnt.small){finish(D);const stamp=nm.L+" – otomatik, "+now();
   try{localStorage.setItem(KEY,JSON.stringify({D,stamp}));}catch(e){}
   applyData(D,stamp);}
  else{let s=null;try{s=JSON.parse(localStorage.getItem(KEY)||"null");}catch(e){}
   if(s)applyData(s.D,s.stamp+" – tarayıcıda saklı");else applyData({},"","yok");}
- /* ürün listesi */
- if(noA){setArt({});ASTAMP="kaldirildi";}
- else if(art){setArt(A);ASTAMP=aName+" – otomatik, "+now();
-  try{await IDB.set(AKEY,{a:artToObj(A),stamp:ASTAMP});}catch(e){}}
- else{try{const s=await IDB.get(AKEY);
-   if(s){setArt(objToArt(s.a));ASTAMP=s.stamp+" – tarayıcıda saklı";}else{setArt({});ASTAMP="";}}
-  catch(e){setArt({});ASTAMP="";}}
- artInfo();
- if(force&&!small&&!art)alert("Lookup dosyaları otomatik okunamadı ("+[...SRC.L,...SRC.A].join(", ")+").\n"
+ /* ürün ve firma listeleri */
+ for(const id of ["A","C"]){const b=BIG[id];
+  if(noB[id]){setBig(id,{});b.stamp="kaldirildi";}
+  else if(cnt[id]){setBig(id,X[id]);b.stamp=nm[id]+" – otomatik, "+now();
+   try{await IDB.set(b.key,{a:mapToObj(X[id]),stamp:b.stamp});}catch(e){}}
+  else{try{const s=await IDB.get(b.key);
+    if(s){setBig(id,objToMap(s.a));b.stamp=s.stamp+" – tarayıcıda saklı";}else{setBig(id,{});b.stamp="";}}
+   catch(e){setBig(id,{});b.stamp="";}}
+ }
+ bigInfo();
+ if(force&&!cnt.small&&!cnt.A&&!cnt.C)alert("Lookup dosyaları otomatik okunamadı ("+[...SRC.L,...SRC.A,...SRC.C].join(", ")+").\n"
   +"Dosyalar HTML ile aynı yerde olmalı. HTML bilgisayardan çift tıklanarak açıldıysa tarayıcı otomatik okumaya izin vermez; 'Lookup dosyasını yükle' ile seçin (bir kez seçmek yeter, tarayıcı saklar).");
 }
 
-/* Elle yükleme: seçilen dosyadaki liste satırları listeleri, ARTICLE satırları ürün listesini değiştirir */
+/* Elle yükleme: liste satırları listeleri, ürün satırları ürün listesini, firma satırları firma listesini değiştirir */
 $("lf").onchange=async e=>{
  const files=[...e.target.files];if(!files.length)return;
- const D={},A={};let small=0,art=0;const msgs=[];
+ const D={},X={A:{},C:{}};let small=0;const cnt={A:0,C:0};const msgs=[];
  for(const file of files){
-  try{const r=ingest(parseCSV(decode(await file.arrayBuffer())),D,A);
-   small+=r.small;art+=r.art;msgs.push(file.name+": "+r.small+" liste satırı, "+r.art+" ürün");}
+  try{const r=ingest(parseCSV(decode(await file.arrayBuffer())),D,X.A,X.C);
+   small+=r.small;cnt.A+=r.art;cnt.C+=r.cmp;
+   msgs.push(`${file.name}: ${r.small} liste satırı, ${r.art} ürün, ${r.cmp} firma`);}
   catch(err){msgs.push(file.name+": "+err);}
  }
  const st=files.map(f=>f.name).join(", ")+" – "+now();
  if(small){finish(D);localStorage.removeItem(NOL);
   try{localStorage.setItem(KEY,JSON.stringify({D,stamp:st}));}catch(err){msgs.push("Listeler tarayıcıya kaydedilemedi; sayfa yenilenince yeniden yüklenmeli.");}
   applyData(D,st);}
- if(art){localStorage.removeItem(NOA);setArt(A);ASTAMP=st;
-  try{await IDB.set(AKEY,{a:artToObj(A),stamp:st});}catch(err){msgs.push("Ürün listesi tarayıcıya kaydedilemedi; sayfa yenilenince yeniden yüklenmeli.");}}
- artInfo();alert(msgs.join("\n"));
+ for(const id of ["A","C"]){if(!cnt[id])continue;const b=BIG[id];
+  localStorage.removeItem(b.no);setBig(id,X[id]);b.stamp=st;
+  try{await IDB.set(b.key,{a:mapToObj(X[id]),stamp:st});}catch(err){msgs.push(b.name+" tarayıcıya kaydedilemedi; sayfa yenilenince yeniden yüklenmeli.");}}
+ bigInfo();alert(msgs.join("\n"));
  e.target.value="";};
 
 /* Kaldırma */
@@ -366,18 +433,19 @@ function clearLists(){
  if(!confirm("Yüklenen listeler (proje, ürün grubu, ülke vb.) kaldırılsın mı?\n\nTablolardaki liste seçimleri boşalır, tarayıcıdaki kopya da silinir.\n'Otomatik yükle'ye basılana ya da dosya seçilene kadar listeler yeniden yüklenmez."))return;
  localStorage.removeItem(KEY);localStorage.setItem(NOL,"1");
  applyData({},"","kaldirildi");}
-async function clearArt(){
- if(!confirm("Ürün listesi kaldırılsın mı?\n\nÜrün kontrolü ve ürün önerisi çalışmaz, tarayıcıdaki kopya da silinir.\n'Otomatik yükle'ye basılana ya da dosya seçilene kadar yeniden yüklenmez."))return;
- try{await IDB.del(AKEY);}catch(e){}
- localStorage.setItem(NOA,"1");setArt({});ASTAMP="kaldirildi";
- artInfo();}
+async function clearBig(id){const b=BIG[id];
+ if(!confirm(`${b.name} kaldırılsın mı?\n\n${b.use[0].toUpperCase()+b.use.slice(1)} çalışmaz, tarayıcıdaki kopya da silinir.\n'Otomatik yükle'ye basılana ya da dosya seçilene kadar yeniden yüklenmez.`))return;
+ try{await IDB.del(b.key);}catch(e){}
+ localStorage.setItem(b.no,"1");setBig(id,{});b.stamp="kaldirildi";
+ bigInfo();}
 
 function opts(c){const o=DATA[curOrg()];const L=c.fix||(o&&o[c.l||c.k])||[];
  return '<option value="">(boş)</option>'+L.map(([k,v])=>`<option value="${esc(k)}">${esc(String(k).trim()===""?"(boşluk)":k)}${v?" - "+esc(v):""}</option>`).join("");}
 function cell(c,t){const ti=` title="${esc(tip(c,t))}"`;
  if(c.t==="sel")return `<select data-k="${c.k}"${ti}>${opts(c)}</select>`;
  if(c.t==="lk")return `<input class="${c.c}" data-k="${c.k}" list="dl_${c.l}" autocomplete="off"${ti} placeholder="${esc(c.tr)}" oninput="lkInput(this)" onchange="lkShow(this)"><span class="ds"></span>`;
- return `<input class="${c.c}" data-k="${c.k}"${ti} placeholder="${esc(c.tr)}" ${(c.t==="num"||c.t==="dec")?'inputmode="decimal"':''}${t==="p5"&&c.k==="ARTICLE_CODE"?' onchange="p5Mark(this)"':''}>`;}
+ const ev=t==="p5"&&c.k==="ARTICLE_CODE"?' onchange="p5Mark(this)"':(t==="p7"&&c.k==="COMPANY_CODE"?' onchange="p7Mark(this)"':'');
+ return `<input class="${c.c}" data-k="${c.k}"${ti} placeholder="${esc(c.tr)}" ${(c.t==="num"||c.t==="dec")?'inputmode="decimal"':''}${ev}>`;}
 const tb=t=>$("tb_"+t);
 function addRow(t,vals){const tr=document.createElement("tr");
  tr.innerHTML="<td></td>"+T[t].cols.map(c=>"<td>"+cell(c,t)+"</td>").join("")+`<td><button onclick="this.closest('tr').remove();renum('${t}')">Sil</button></td>`;
@@ -394,6 +462,10 @@ function p5Mark(inp){if(!inp)return;const v=inp.value.trim();inp.classList.remov
  if(!v||!ARTOK)return;
  const m=artMap();
  if(m.has(v)||m.has(normArt(v))){inp.classList.add("wrn");inp.title="Bu ürün sistemde zaten var: "+(m.get(v)||m.get(normArt(v))||"")+" – bu satır işlenmez";}}
+function p7Mark(inp){if(!inp)return;const v=inp.value.trim();inp.classList.remove("wrn");inp.title=tip(T.p7.cols[0],"p7");
+ if(!v||!CMPOK)return;
+ const m=cmpMap();
+ if(m.has(v)){inp.classList.add("wrn");inp.title="Bu firma kodu sistemde zaten var: "+(m.get(v)||"")+" – sistemin bu satırla ne yapacağı (güncelleme / hata) entegrasyondan teyit edilecek";}}
 function lkInput(inp){const q=inp.value.trim().toUpperCase(),dl=$("dl_ARTICLE");
  if(q.length<2){dl.innerHTML="";lkShow(inp);return;}
  const out=[];for(const [k,v] of artMap()){
@@ -406,8 +478,10 @@ function lkShow(inp){if(!inp)return;const sp=inp.nextElementSibling,v=inp.value.
  if(m.has(v)){sp.textContent=m.get(v)||"✓ (açıklama yok)";sp.title=sp.textContent;return;}
  if(p5Codes().has(normArt(v))){sp.textContent="✓ Ürün Kartı sekmesinde";return;}
  if(ARTOK){sp.className="ds no";sp.textContent="listede yok";}}
-function markRow(t,tr){if(t==="p5")p5Mark(tr.querySelector('[data-k="ARTICLE_CODE"]'));
- else lkShow(tr.querySelector('[data-k="ARTICLE_CODE"]'));}
+function markRow(t,tr){
+ if(t==="p5")p5Mark(tr.querySelector('[data-k="ARTICLE_CODE"]'));
+ else if(t==="p8")lkShow(tr.querySelector('[data-k="ARTICLE_CODE"]'));
+ else p7Mark(tr.querySelector('[data-k="COMPANY_CODE"]'));}
 function refreshLk(){TABS.forEach(t=>[...tb(t).rows].forEach(tr=>markRow(t,tr)));}
 
 function refreshOrg(){TABS.forEach(t=>[...tb(t).rows].forEach(tr=>{const v=getVals(tr);
@@ -437,37 +511,47 @@ function readSheet(file){return new Promise((res,rej)=>{
 
 async function importExcel(t,inp){const file=inp.files[0];inp.value="";if(!file)return;
  const m=$("msg_"+t),ok=$("ok_"+t);m.textContent="";ok.textContent="";
+ const K=T[t].uniq[0],unit=t==="p7"?"firma":"ürün";
  let rows;try{rows=await readSheet(file);}catch(e){m.textContent=String(e);return;}
  rows=rows.filter(r=>r.some(x=>String(x).trim()!==""));
  if(rows.length<2){m.textContent="Dosyada başlık satırından sonra veri yok.";return;}
  const h=rows[0].map(x=>String(x).trim().toUpperCase()),map=T[t].xl,idx={},miss=[];
  Object.keys(map).forEach(src=>{const i=h.indexOf(src);if(i<0)miss.push(src);else idx[map[src]]=i;});
- if(idx.ARTICLE_CODE===undefined){m.textContent="Dosyada ARTICLE_CODE kolonu yok.";return;}
+ if(idx[K]===undefined){m.textContent=`Dosyada ${K} kolonu yok.`;return;}
  [...tb(t).rows].forEach(tr=>{if(isEmpty(tr))tr.remove();});
  const byKey=new Map();
- [...tb(t).rows].forEach(tr=>{const c=getVals(tr).ARTICLE_CODE.trim();if(c&&!byKey.has(c))byKey.set(c,tr);});
+ [...tb(t).rows].forEach(tr=>{const c=getVals(tr)[K].trim();if(c&&!byKey.has(c))byKey.set(c,tr);});
  const seen=new Set(),dups=[];let add=0,upd=0;
  rows.slice(1).forEach((r,i)=>{const v={};Object.keys(idx).forEach(k=>v[k]=String(r[idx[k]]??"").trim());
-  const code=v.ARTICLE_CODE;if(!code)return;
+  const code=v[K];if(!code)return;
   if(seen.has(code)){dups.push(code+" (satır "+(i+2)+")");return;}seen.add(code);
   if(byKey.has(code)){setVals(byKey.get(code),v);markRow(t,byKey.get(code));upd++;}
   else{addRow(t,v);add++;}});
  renum(t);
- ok.textContent=`${add} ürün eklendi, ${upd} ürün güncellendi.`+(miss.length?`\nDosyada bulunamayan kolonlar: ${miss.join(", ")}`:"");
- if(dups.length)m.textContent="Dosyada tekrar eden ürün kodları (ilk satır alındı):\n"+dups.join("\n");}
+ ok.textContent=`${add} ${unit} eklendi, ${upd} ${unit} güncellendi.`+(miss.length?`\nDosyada bulunamayan kolonlar: ${miss.join(", ")}`:"");
+ if(dups.length)m.textContent=`Dosyada tekrar eden ${unit} kodları (ilk satır alındı):\n`+dups.join("\n");}
 
 function applyFirst(t){const m=$("msg_"+t),ok=$("ok_"+t);m.textContent="";ok.textContent="";
  const rows=[...tb(t).rows].filter(tr=>!isEmpty(tr));
  if(rows.length<2){m.textContent="Uygulamak için en az iki dolu satır olmalı.";return;}
+ const f=getVals(rows[0]);
+ if(T[t].apply){
+  /* Firma Kartı: yalnız ortak alanlar, yalnız boş hücrelere */
+  const cols=T[t].cols.filter(c=>T[t].apply.includes(c.k)&&f[c.k]!=="");
+  if(!cols.length){m.textContent="İlk satırda kopyalanacak ortak alan yok ("+T[t].apply.join(", ")+").";return;}
+  if(!confirm(`${cols.map(c=>c.k).join(", ")} alanları ${rows.length-1} satırın BOŞ hücrelerine kopyalanacak. Devam edilsin mi?`))return;
+  let n=0;rows.slice(1).forEach(tr=>{const cur=getVals(tr),v={};cols.forEach(c=>{if(String(cur[c.k]).trim()===""){v[c.k]=f[c.k];n++;}});setVals(tr,v);});
+  ok.textContent=`${n} hücre dolduruldu (dolu hücrelere dokunulmadı).`;return;
+ }
  const skip=new Set(["ARTICLE_CODE",...Object.values(T[t].xl)]);
- const f=getVals(rows[0]),cols=T[t].cols.filter(c=>!skip.has(c.k)&&f[c.k]!=="");
+ const cols=T[t].cols.filter(c=>!skip.has(c.k)&&f[c.k]!=="");
  if(!cols.length){m.textContent="İlk satırda kopyalanacak alan yok (ürün kodu ve Excel'den gelen alanlar hariç).";return;}
  if(!confirm(`${cols.map(c=>c.k).join(", ")} alanları ${rows.length-1} satıra kopyalanacak. Devam edilsin mi?`))return;
  rows.slice(1).forEach(tr=>{const v={};cols.forEach(c=>v[c.k]=f[c.k]);setVals(tr,v);});
  ok.textContent=`${cols.length} alan ${rows.length-1} satıra kopyalandı.`;}
 
 function validate(t){
- const errs=[],warns=[],rows=[];const keys=new Map();const m=artMap(),p5=p5Codes();
+ const errs=[],warns=[],rows=[];const keys=new Map();const m=artMap(),p5=p5Codes(),cm=cmpMap();
  [...tb(t).rows].forEach((tr,i)=>{tr.querySelectorAll(".err").forEach(e=>e.classList.remove("err"));
   if(isEmpty(tr))return;
   const v=getVals(tr),n=i+1,bad=(k,msg)=>{errs.push(`Satır ${n}: ${msg}`);const e=tr.querySelector(`[data-k="${k}"]`);if(e)e.classList.add("err");};
@@ -475,19 +559,26 @@ function validate(t){
    if(c.req&&!x){bad(c.k,`${c.k} zorunlu`);return;}
    if(!x)return;
    if(x.includes("|")||x.includes('"'))bad(c.k,`${c.k} içinde | ya da " karakteri olamaz`);
-   if(c.max&&x.length>c.max)bad(c.k,`${c.k} en çok ${c.max} karakter (şu an ${x.length}) – sistem keserdi`);
+   if(c.max&&x.length>c.max)bad(c.k,`${c.k} en çok ${c.max} karakter (şu an ${x.length}) – sistem keser ya da kaydı ekleyemez`);
    if(c.t==="num"&&!/^\d+$/.test(x))bad(c.k,`${c.k} tam sayı olmalı`);
    if(c.t==="dec"&&!/^\d+(\.\d+)?$/.test(x))bad(c.k,`${c.k} sayı olmalı, ondalık ayıraç nokta`);});
-  const code=v.ARTICLE_CODE.trim();
-  if(code&&/^0/.test(code))warns.push(`Satır ${n}: ${code} sıfırla başlıyor – Ürün Kartı baştaki sıfırları siler, Ürün Ölçü Kartı silmez; kodun sistemdeki haliyle aynı olduğundan emin olun`);
-  if(t==="p5"&&code&&ARTOK&&(m.has(code)||m.has(normArt(code))))warns.push(`Satır ${n}: ${code} sistemde zaten var – işlenmeyecek`);
-  if(t==="p8"&&code&&ARTOK&&!m.has(code)&&!p5.has(normArt(code)))bad("ARTICLE_CODE",`${code} sistemde ve Ürün Kartı sekmesinde yok`);
+  if(t==="p7"){
+   const code=v.COMPANY_CODE.trim();
+   if(code&&CMPOK&&cm.has(code))warns.push(`Satır ${n}: ${code} firma kodu sistemde zaten var – sistemin bu satırla ne yapacağı entegrasyondan teyit edilecek`);
+   if(String(v.CITY_CODE).trim())warns.push(`Satır ${n}: İl kodu dosyaya yazılır ama sistemde hiçbir alana aktarılmaz`);
+  }else{
+   const code=v.ARTICLE_CODE.trim();
+   if(code&&/^0/.test(code))warns.push(`Satır ${n}: ${code} sıfırla başlıyor – Ürün Kartı baştaki sıfırları siler, Ürün Ölçü Kartı silmez; kodun sistemdeki haliyle aynı olduğundan emin olun`);
+   if(t==="p5"&&code&&ARTOK&&(m.has(code)||m.has(normArt(code))))warns.push(`Satır ${n}: ${code} sistemde zaten var – işlenmeyecek`);
+   if(t==="p8"&&code&&ARTOK&&!m.has(code)&&!p5.has(normArt(code)))bad("ARTICLE_CODE",`${code} sistemde ve Ürün Kartı sekmesinde yok`);
+  }
   const key=T[t].uniq.map(k=>String(v[k]).trim()).join(" + ");
   if(keys.has(key))bad(T[t].uniq[0],`${key} tekrar ediyor (satır ${keys.get(key)})`);else keys.set(key,n);
   rows.push(v);});
  if(!rows.length)errs.push("İndirilecek dolu satır yok.");
  if(!curOrg())errs.push("Proje (ORG_CODE) seçilmedi – listeler yüklü değilse önce lookup dosyasını yükleyin.");
  if(t==="p8"&&!ARTOK)warns.push("Ürün listesi yüklü değil: ürün kodları sistemle karşılaştırılmadı.");
+ if(t==="p7"&&!CMPOK)warns.push("Firma listesi yüklü değil: firma kodları sistemle karşılaştırılmadı.");
  return {errs,warns,rows};}
 
 function download(t,fmt){const m=$("msg_"+t),ok=$("ok_"+t),wm=$("wm_"+t);m.textContent="";ok.textContent="";wm.textContent="";
