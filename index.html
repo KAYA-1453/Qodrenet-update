@@ -244,19 +244,31 @@ function parseCSV(t){
 function ingest(rows,D,A){
  const h=rows[0].map(x=>x.trim().toUpperCase());
  const iO=h.indexOf("ORG_CODE"),iL=h.indexOf("LISTE"),iK=h.indexOf("KOD"),iA=h.indexOf("ACIKLAMA");
- if([iO,iL,iK,iA].includes(-1))throw "Dosyada ORG_CODE, LISTE, KOD, ACIKLAMA kolonları bulunamadı.";
- let small=0,art=0;const gen=D.__gen||(D.__gen=[]);
- for(let i=1;i<rows.length;i++){const r=rows[i];if(r.length<4)continue;
-  const o=(r[iO]||"").trim(),l=(r[iL]||"").trim(),k=r[iK]??"",a=(r[iA]||"").trim();
-  if(!l)continue;
-  if(l==="SEVK_GENEL"){gen.push([k,a]);small++;continue;}
-  if(!o)continue;
-  if(IS_C&&o!==ORG)continue;
-  if(l==="ARTICLE"){(A[o]=A[o]||new Map()).set(String(k).trim(),a);art++;continue;}
-  D[o]=D[o]||{name:""};
-  if(l==="ORG"){D[o].name=a;small++;continue;}
-  (D[o][l]=D[o][l]||[]).push([k,a]);small++;}
- return {small,art};}
+ if(![iO,iL,iK,iA].includes(-1)){
+  let small=0,art=0;const gen=D.__gen||(D.__gen=[]);
+  for(let i=1;i<rows.length;i++){const r=rows[i];if(r.length<4)continue;
+   const o=(r[iO]||"").trim(),l=(r[iL]||"").trim(),k=r[iK]??"",a=(r[iA]||"").trim();
+   if(!l)continue;
+   if(l==="SEVK_GENEL"){gen.push([k,a]);small++;continue;}
+   if(!o)continue;
+   if(IS_C&&o!==ORG)continue;
+   if(l==="ARTICLE"){(A[o]=A[o]||new Map()).set(String(k).trim(),a);art++;continue;}
+   D[o]=D[o]||{name:""};
+   if(l==="ORG"){D[o].name=a;small++;continue;}
+   (D[o][l]=D[o][l]||[]).push([k,a]);small++;}
+  return {small,art};
+ }
+ const iAC=h.indexOf("ARTICLE_CODE"),iAD=h.indexOf("ARTICLE_DESCRIPTION");
+ if(iO!==-1&&iAC!==-1){
+  let art=0;
+  for(let i=1;i<rows.length;i++){const r=rows[i];
+   const o=(r[iO]||"").trim(),k=(r[iAC]||"").trim(),a=iAD!==-1?(r[iAD]||"").trim():"";
+   if(!o||!k)continue;
+   if(IS_C&&o!==ORG)continue;
+   (A[o]=A[o]||new Map()).set(k,a);art++;}
+  return {small:0,art};
+ }
+ throw "Dosyada beklenen kolonlar (ORG_CODE, LISTE, KOD, ACIKLAMA veya ORG_CODE, ARTICLE_CODE) bulunamadı.";}
 
 function finish(D){
  const gen=D.__gen||[];delete D.__gen;
