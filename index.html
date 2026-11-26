@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WMS Sağlık – Quadronet Dosya Update</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+body{font-family:Segoe UI,Arial,sans-serif;font-size:13px;margin:16px;background:#f5f6f8}
+h2{margin:0 0 10px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+button,.file{padding:6px 12px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer}
+button.p{background:#1f5fa8;color:#fff;border-color:#1f5fa8}
+.file input{display:none}
+.file.x{background:#e8f3e8;border-color:#4a8a4a}
+.tabs{display:flex;gap:4px;margin:6px 0 0;flex-wrap:wrap}
+.tabs button{border-radius:6px 6px 0 0;border-bottom:none;background:#dde3ea;font-weight:600}
+.tabs button.on{background:#fff}
+.pane{display:none;background:#fff;border:1px solid #ccc;padding:10px}
+.pane.on{display:block}
+.wrap{overflow:auto;max-height:65vh;border:1px solid #ccc}
+table{border-collapse:collapse;white-space:nowrap}
+th{position:sticky;top:0;background:#e9edf3;padding:6px;border:1px solid #ccc;font-weight:600;z-index:1;cursor:help;vertical-align:top}
+th.xl{background:#dfeedd}
+th .tr{display:block;font-weight:400;color:#555;font-size:11px;margin-top:2px}
+th .df{display:block;font-weight:400;color:#888;font-size:10px}
+td{border:1px solid #ddd;padding:2px}
+input,select{font-size:12px;padding:3px;border:1px solid #bbb;border-radius:3px}
+input.t{width:120px} input.d{width:280px} input.n{width:70px} input.s{width:80px}
+select{max-width:210px}
+.ds{display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;font-size:11px;color:#555;margin-left:4px}
+.ds.no{color:#c00}
+.err{background:#ffd6d6!important;border-color:#d00!important}
+.wrn{background:#fff1cc!important;border-color:#c90!important}
+.ok{color:#2a6a2a;margin-top:8px;white-space:pre-line}
+.wm{color:#8a6100;margin-top:8px;white-space:pre-line}
+.msg{color:#c00;margin-top:8px;white-space:pre-line}
+.leg{font-size:11px;color:#555;margin-bottom:6px}
+.mode{font-size:11px;padding:2px 8px;border:1px solid #999;border-radius:10px;color:#333;margin-left:8px;vertical-align:middle;font-weight:400}
+#info,#info2{color:#555}
+</style>
+</head>
+<body>
+<h2>WMS Sağlık – Quadronet Dosya Update<span class="mode" id="modeTag"></span></h2>
+<div class="bar">
+ <label class="file" title="Lookup dosyaları; birden fazla seçilebilir">Lookup dosyasını yükle<input type="file" id="lf" accept=".csv,.txt" multiple></label>
+ <span id="info">Listeler yükleniyor...</span>
+ <span id="info2"></span>
+ <label id="orgBox" style="margin-left:20px">ORG_CODE (Proje): <select id="org"></select></label>
+ <span id="orgFix" style="margin-left:20px;font-weight:600"></span>
+</div>
+<div class="tabs">
+ <button id="tab_p5" class="on" onclick="showTab('p5')">Ürün Kartı</button>
+ <button id="tab_p8" onclick="showTab('p8')">Ürün Ölçü Kartı</button>
+</div>
+
+<div class="pane on" id="pane_p5">
+ <div class="bar">
+  <label class="file x" title="Başlıklı Excel/CSV: ARTICLE_CODE, ARTICLE_DESCRIPTION, GTIN, MIAD_CHECK, SHELF_LIFE">Excel'den ürün yükle<input type="file" accept=".xlsx,.xls,.csv,.txt" onchange="importExcel('p5',this)"></label>
+  <button onclick="applyFirst('p5')">İlk satırı tüm satırlara uygula</button>
+  <button onclick="addRow('p5')">+ Satır ekle</button>
+  <button onclick="copyLast('p5')">Son satırı kopyala</button>
+  <button class="p" onclick="download('p5','txt')">Dosya indir (.txt)</button>
+  <button class="p" onclick="download('p5','xlsx')">Excel indir</button>
+  <span id="cnt_p5"></span>
+ </div>
+ <div class="leg">Yeşil başlıklı alanlar Excel'den gelir. Gri küçük yazı, alan boş bırakılırsa sistemin yazacağı değerdir. Sistemde zaten olan ürün sarı işaretlenir: bu satır işlenmez, mevcut kart güncellenmez.</div>
+ <div class="wrap"><table><thead><tr id="hd_p5"></tr></thead><tbody id="tb_p5"></tbody></table></div>
+ <div class="ok" id="ok_p5"></div>
+ <div class="wm" id="wm_p5"></div>
+ <div class="msg" id="msg_p5"></div>
+</div>
+
+<div class="pane" id="pane_p8">
+ <div class="bar">
+  <label class="file x" title="Başlıklı Excel/CSV: ARTICLE_CODE ve GTIN okunur (GTIN → BARCODE_GTIN)">Excel'den ürün yükle<input type="file" accept=".xlsx,.xls,.csv,.txt" onchange="importExcel('p8',this)"></label>
+  <button onclick="applyFirst('p8')">İlk satırı tüm satırlara uygula</button>
+  <button onclick="addRow('p8')">+ Satır ekle</button>
+  <button onclick="copyLast('p8')">Son satırı kopyala</button>
+  <button onclick="importFrom5()">Ürün Kartından ürünleri getir</button>
+  <button class="p" onclick="download('p8','txt')">Dosya indir (.txt)</button>
+  <button class="p" onclick="download('p8','xlsx')">Excel indir</button>
+  <span id="cnt_p8"></span>
+ </div>
+ <div class="leg">Yeşil başlıklı alanlar Excel'den gelir (GTIN → GTIN Barkodu). Ürün kodunda 2 karakter yazınca sistem listesinden öneri gelir. Ürün, sistemde ya da Ürün Kartı sekmesinde olmalı.</div>
+ <div class="wrap"><table><thead><tr id="hd_p8"></tr></thead><tbody id="tb_p8"></tbody></table></div>
+ <div class="ok" id="ok_p8"></div>
+ <div class="wm" id="wm_p8"></div>
+ <div class="msg" id="msg_p8"></div>
+</div>
+
+<datalist id="dl_ARTICLE"></datalist>
+
+<script>
+/* =====================================================================
+   AYAR BLOĞU – yalnız bu satırlar değişir
+   Operasyon sürümü : MOD="ALLP", ORG=""
+   Müşteri sürümü   : MOD="ALLC", ORG="<proje kodu>" (ör. "NOVA")
+   ===================================================================== */
+const MOD="ALLP";
+const ORG="";
+const HEADER_ROW=true;   // indirilen .txt dosyasının ilk satırına kolon başlıkları yazılsın mı
+/* ===================================================================== */
+
+const IS_C=MOD==="ALLC";
+const DTR={p5:MOD+"105",p8:MOD+"108"};          // dosya adında kullanılır
+const NM={p5:"Ürün Kartı",p8:"Ürün Ölçü Kartı"};
+const FILES=IS_C?["YS19_Lookup_"+ORG+".csv"]:["YS19_Lookup_Listeleri.csv","YS19_Lookup_AMI.csv"];
+const KEY="ys19_dtr_lookup_"+MOD+"_"+(ORG||"ALL");
+
+const PTS=[["0","ÜTS Dışı"],["1","Lotlu Ürün"],["2","Serili Ürün"]];
+const DDO=[["0","Karekodsuz"],["1","Karekodlu"]];
+let DATA={};
+const ART={};
+let ARTOK=false;
+
+const T={
+ p5:{uniq:["ARTICLE_CODE"],clear:["ARTICLE_CODE","ARTICLE_DESCRIPTION","OLD_ARTICLE_CODE","GTIN"],
+  xl:{ARTICLE_CODE:"ARTICLE_CODE",ARTICLE_DESCRIPTION:"ARTICLE_DESCRIPTION",GTIN:"GTIN",MIAD_CHECK:"MIAD_CHECK",SHELF_LIFE:"SHELF_LIFE"},cols:[
+  {k:"ARTICLE_CODE",tr:"Ürün Kodu",t:"text",c:"t",req:1,max:40,note:"Baştaki sıfırlar sistemde silinir"},
+  {k:"ARTICLE_DESCRIPTION",tr:"Ürün Tanımı",t:"text",c:"d",req:1,max:60},
+  {k:"OLD_ARTICLE_CODE",tr:"Eski Ürün Kodu",t:"text",c:"t",max:40},
+  {k:"GTIN",tr:"Ürün Barkodu (GTIN)",t:"text",c:"t",max:40,df:"1111111111111"},
+  {k:"SEVKONCELIK",tr:"Sevk Önceliği",t:"sel",df:"NORMAL"},
+  {k:"ARTICLE_GROUP",tr:"Ürün Grubu",t:"sel",df:"XX"},
+  {k:"ARTICLE_TYPE",tr:"Ürün Tipi",t:"sel",max:4},
+  {k:"ARTICLE_CATEGORY",tr:"Ürün Kategorisi",t:"sel",max:2},
+  {k:"PACKAGING_GROUP",tr:"Paketleme Grubu",t:"sel",df:"XX"},
+  {k:"MIAD_CHECK",tr:"Miat Kontrolü (gün)",t:"num",c:"n",df:"30"},
+  {k:"SHELF_LIFE",tr:"Raf Ömrü (gün)",t:"num",c:"n",df:"Miat × 3"},
+  {k:"VAS_OPER",tr:"2D İşlem Kodu",t:"sel",max:20},
+  {k:"PTS_TYPE",tr:"ÜTS Dışı / Lotlu / Serili",t:"sel",fix:PTS,max:1},
+  {k:"PROJ_ID",tr:"Proje Kodu",t:"sel",max:10},
+  {k:"COUNTRY_PURCHASE",tr:"Satın Alındığı Ülke",t:"sel",l:"COUNTRY",max:3},
+  {k:"COUNTRY_IMPORT",tr:"Üretildiği Ülke (Menşei)",t:"sel",l:"COUNTRY",df:"TR"},
+  {k:"DD_OPER",tr:"Karekod Durumu",t:"sel",fix:DDO,df:"1"},
+  {k:"UOM",tr:"Temel Birim",t:"sel",max:4,df:"PCE"},
+  {k:"MODEL_TYPE",tr:"Model Tipi",t:"sel"}]},
+ p8:{uniq:["ARTICLE_CODE","UOM"],
+  clear:["UOM","QUANTITY","EAN","BARCODE_GTIN","LOT1","LOT2","LENGTH","WIDTH","HEIGHT","WEIGHT"],
+  xl:{ARTICLE_CODE:"ARTICLE_CODE",GTIN:"BARCODE_GTIN"},cols:[
+  {k:"ARTICLE_CODE",tr:"Ürün Kodu",t:"lk",l:"ARTICLE",c:"t",req:1,max:40},
+  {k:"UOM",tr:"Ölçü Birimi",t:"sel",req:1,max:4},
+  {k:"QUANTITY",tr:"Birimdeki Adet",t:"dec",c:"n",req:1,max:13},
+  {k:"EAN",tr:"Birim Barkodu",t:"text",c:"t",max:40},
+  {k:"BARCODE_GTIN",tr:"GTIN Barkodu",t:"text",c:"t",max:50},
+  {k:"LOT1",tr:"Lot Bilgisi 1",t:"text",c:"s",max:10},
+  {k:"LOT2",tr:"Lot Bilgisi 2",t:"text",c:"s",max:10},
+  {k:"LENGTH",tr:"Uzunluk (Boy)",t:"dec",c:"n",max:13},
+  {k:"WIDTH",tr:"Genişlik (En)",t:"dec",c:"n",max:13},
+  {k:"HEIGHT",tr:"Yükseklik",t:"dec",c:"n",max:13},
+  {k:"WEIGHT",tr:"Brüt Ağırlık",t:"dec",c:"n",max:13}]}
+};
+const TABS=["p5","p8"];
+const esc=s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const $=id=>document.getElementById(id);
+const orgSel=$("org"),info=$("info"),info2=$("info2");
+const isXL=(t,k)=>Object.values(T[t].xl).includes(k);
+const curOrg=()=>IS_C?ORG:orgSel.value;
+const artMap=()=>ART[curOrg()]||new Map();
+const normArt=s=>String(s||"").trim().replace(/^0+/,"");
+
+$("modeTag").textContent=IS_C?"Müşteri sürümü":"Operasyon sürümü";
+document.title="WMS Sağlık – Quadronet Dosya Update"+(IS_C?" – "+ORG:"");
+if(IS_C){$("orgBox").style.display="none";}
+
+function showTab(t){TABS.forEach(x=>{$("tab_"+x).classList.toggle("on",x===t);$("pane_"+x).classList.toggle("on",x===t);});}
+
+function tip(c,t){const a=[c.tr];
+ if(c.note)a.push(c.note);
+ a.push(c.req?"Zorunlu":"Boş bırakılabilir");
+ if(c.df)a.push("Boşsa sistem "+c.df+" yazar");
+ if(isXL(t,c.k))a.push("Excel'den yüklenir");
+ if(c.t==="sel")a.push("Listeden seçilir");
+ if(c.t==="lk")a.push("Sistem listesinden önerilir");
+ if(c.max)a.push("En çok "+c.max+" karakter");
+ if(c.t==="num")a.push("Yalnız tam sayı");
+ if(c.t==="dec")a.push("Sayı, ondalık ayıraç nokta");
+ return a.join(" • ");}
+
+function header(t){$("hd_"+t).innerHTML="<th>#</th>"+T[t].cols.map(c=>
+ `<th class="${isXL(t,c.k)?"xl":""}" title="${esc(tip(c,t))}">${c.k}${c.req?' <span style="color:#c00">*</span>':""}<span class="tr">${esc(c.tr)}</span>${c.df?'<span class="df">boşsa: '+esc(c.df)+'</span>':""}</th>`).join("")+"<th></th>";}
+
+function parseCSV(t){
+ t=t.replace(/^﻿/,"");
+ const first=t.split(/\r?\n/,1)[0];
+ const d=[";","\t",","].map(c=>[c,first.split(c).length]).sort((a,b)=>b[1]-a[1])[0][0];
+ const rows=[];let row=[],f="",q=false;
+ for(let i=0;i<t.length;i++){const ch=t[i];
+  if(q){if(ch=='"'){if(t[i+1]=='"'){f+='"';i++;}else q=false;}else f+=ch;}
+  else if(ch=='"')q=true;
+  else if(ch===d){row.push(f);f="";}
+  else if(ch=="\n"){row.push(f);rows.push(row);row=[];f="";}
+  else if(ch!="\r")f+=ch;}
+ if(f!==""||row.length){row.push(f);rows.push(row);}
+ return rows;}
+
+function ingest(rows,D){
+ const h=rows[0].map(x=>x.trim().toUpperCase());
+ const iO=h.indexOf("ORG_CODE"),iL=h.indexOf("LISTE"),iK=h.indexOf("KOD"),iA=h.indexOf("ACIKLAMA");
+ if([iO,iL,iK,iA].includes(-1))throw "Dosyada ORG_CODE, LISTE, KOD, ACIKLAMA kolonları bulunamadı.";
+ let small=0,art=0;const gen=D.__gen||(D.__gen=[]);
+ for(let i=1;i<rows.length;i++){const r=rows[i];if(r.length<4)continue;
+  const o=(r[iO]||"").trim(),l=(r[iL]||"").trim(),k=r[iK]??"",a=(r[iA]||"").trim();
+  if(!l)continue;
+  if(l==="SEVK_GENEL"){gen.push([k,a]);small++;continue;}
+  if(!o)continue;
+  if(IS_C&&o!==ORG)continue;
+  if(l==="ARTICLE"){(ART[o]=ART[o]||new Map()).set(String(k).trim(),a);art++;continue;}
+  D[o]=D[o]||{name:""};
+  if(l==="ORG"){D[o].name=a;small++;continue;}
+  (D[o][l]=D[o][l]||[]).push([k,a]);small++;}
+ return {small,art};}
+
+function finish(D){
+ const gen=D.__gen||[];delete D.__gen;
+ Object.keys(D).forEach(o=>{const x=D[o],s=x.SEVKONCELIK||[],seen=new Set(s.map(v=>v[0]));
+  gen.forEach(v=>{if(!seen.has(v[0])){s.push(v);seen.add(v[0]);}});x.SEVKONCELIK=s;});
+ return D;}
+
+function applyData(D,stamp){
+ DATA=D;
+ if(IS_C){
+  $("orgFix").textContent="Proje: "+ORG+(D[ORG]&&D[ORG].name?" – "+D[ORG].name:"");
+  info.textContent=D[ORG]?`Listeler yüklü (${stamp})`:`${ORG} projesinin listeleri dosyada yok.`;
+ }else{
+  const cur=orgSel.value;orgSel.innerHTML="";
+  Object.keys(D).sort().forEach(o=>orgSel.add(new Option(o+" - "+D[o].name,o)));
+  if(cur&&D[cur])orgSel.value=cur;
+  info.textContent=`Listeler yüklü: ${Object.keys(D).length} proje (${stamp})`;
+ }
+ refreshOrg();}
+
+function artInfo(){const n=Object.values(ART).reduce((s,m)=>s+m.size,0);
+ ARTOK=n>0;
+ info2.textContent=ARTOK?` • Ürün listesi: ${n.toLocaleString("tr-TR")} ürün`:" • Ürün listesi yüklü değil (ürün kontrolü yapılmaz)";
+ refreshLk();}
+
+const decode=buf=>{let t=new TextDecoder("utf-8").decode(buf);if(t.includes("�"))t=new TextDecoder("windows-1254").decode(buf);return t;};
+
+async function loadDefault(){
+ const D={};let gotSmall=false;
+ for(const f of FILES){
+  try{const res=await fetch(f+"?t="+Date.now());if(!res.ok)continue;
+   const r=ingest(parseCSV(decode(await res.arrayBuffer())),D);if(r.small)gotSmall=true;}catch(e){}
+ }
+ if(gotSmall){finish(D);const stamp=FILES[0]+" – otomatik";
+  try{localStorage.setItem(KEY,JSON.stringify({D,stamp}));}catch(e){}
+  applyData(D,stamp);}
+ else{
+  try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s){applyData(s.D,s.stamp+" – tarayıcıda saklı");}
+   else info.textContent="Listeler yüklenmedi. Lookup dosyasını seçin ("+FILES.join(", ")+").";}
+  catch(e){info.textContent="Listeler yüklenmedi. Lookup dosyasını seçin.";}
+ }
+ artInfo();}
+
+$("lf").onchange=async e=>{
+ const files=[...e.target.files];if(!files.length)return;
+ const D={};let gotSmall=false,msgs=[];
+ for(const file of files){
+  try{const r=ingest(parseCSV(decode(await file.arrayBuffer())),D);
+   if(r.small)gotSmall=true;msgs.push(file.name+": "+r.small+" liste satırı, "+r.art+" ürün");}
+  catch(err){msgs.push(file.name+": "+err);}
+ }
+ if(gotSmall){finish(D);const stamp=files.map(f=>f.name).join(", ")+" – "+new Date().toLocaleString("tr-TR");
+  try{localStorage.setItem(KEY,JSON.stringify({D,stamp}));}catch(err){}
+  applyData(D,stamp);}
+ artInfo();alert(msgs.join("\n"));
+ e.target.value="";};
+
+function opts(c){const o=DATA[curOrg()];const L=c.fix||(o&&o[c.l||c.k])||[];
+ return '<option value="">(boş)</option>'+L.map(([k,v])=>`<option value="${esc(k)}">${esc(String(k).trim()===""?"(boşluk)":k)}${v?" - "+esc(v):""}</option>`).join("");}
+function cell(c,t){const ti=` title="${esc(tip(c,t))}"`;
+ if(c.t==="sel")return `<select data-k="${c.k}"${ti}>${opts(c)}</select>`;
+ if(c.t==="lk")return `<input class="${c.c}" data-k="${c.k}" list="dl_${c.l}" autocomplete="off"${ti} placeholder="${esc(c.tr)}" oninput="lkInput(this)" onchange="lkShow(this)"><span class="ds"></span>`;
+ return `<input class="${c.c}" data-k="${c.k}"${ti} placeholder="${esc(c.tr)}" ${(c.t==="num"||c.t==="dec")?'inputmode="decimal"':''}${t==="p5"&&c.k==="ARTICLE_CODE"?' onchange="p5Mark(this)"':''}>`;}
+const tb=t=>$("tb_"+t);
+function addRow(t,vals){const tr=document.createElement("tr");
+ tr.innerHTML="<td></td>"+T[t].cols.map(c=>"<td>"+cell(c,t)+"</td>").join("")+`<td><button onclick="this.closest('tr').remove();renum('${t}')">Sil</button></td>`;
+ tb(t).appendChild(tr);if(vals)setVals(tr,vals);renum(t);markRow(t,tr);return tr;}
+function getVals(tr){const o={};tr.querySelectorAll("[data-k]").forEach(e=>o[e.dataset.k]=e.value);return o;}
+function setVals(tr,o){tr.querySelectorAll("[data-k]").forEach(e=>{if(o[e.dataset.k]!==undefined)e.value=o[e.dataset.k];});}
+const isEmpty=tr=>!Object.values(getVals(tr)).some(x=>String(x).trim()!=="");
+function copyLast(t){const r=[...tb(t).rows].reverse().find(x=>!isEmpty(x));if(!r){addRow(t);return;}
+ const v=getVals(r);T[t].clear.forEach(k=>v[k]="");
+ const n=addRow(t,v);(n.querySelector(t==="p8"?'[data-k="UOM"]':"input")).focus();}
+function renum(t){[...tb(t).rows].forEach((r,i)=>r.cells[0].textContent=i+1);$("cnt_"+t).textContent=tb(t).rows.length+" satır";}
+
+function p5Mark(inp){const v=inp.value.trim();inp.classList.remove("wrn");inp.title=tip(T.p5.cols[0],"p5");
+ if(!v||!ARTOK)return;
+ const m=artMap();
+ if(m.has(v)||m.has(normArt(v))){inp.classList.add("wrn");inp.title="Bu ürün sistemde zaten var: "+(m.get(v)||m.get(normArt(v))||"")+" – bu satır işlenmez";}}
+function lkInput(inp){const q=inp.value.trim().toUpperCase(),dl=$("dl_ARTICLE");
+ if(q.length<2){dl.innerHTML="";lkShow(inp);return;}
+ const out=[];for(const [k,v] of artMap()){
+  if(k.toUpperCase().includes(q)||String(v).toUpperCase().includes(q)){out.push(`<option value="${esc(k)}">${esc(v)}</option>`);if(out.length>=50)break;}}
+ dl.innerHTML=out.join("");lkShow(inp);}
+function p5Codes(){return new Set([...tb("p5").rows].map(tr=>normArt(getVals(tr).ARTICLE_CODE)).filter(x=>x));}
+function lkShow(inp){const sp=inp.nextElementSibling,v=inp.value.trim();sp.className="ds";sp.textContent="";
+ if(!v)return;
+ const m=artMap();
+ if(m.has(v)){sp.textContent=m.get(v)||"✓ (açıklama yok)";sp.title=sp.textContent;return;}
+ if(p5Codes().has(normArt(v))){sp.textContent="✓ Ürün Kartı sekmesinde";return;}
+ if(ARTOK){sp.className="ds no";sp.textContent="listede yok";}}
+function markRow(t,tr){if(t==="p5")p5Mark(tr.querySelector('[data-k="ARTICLE_CODE"]'));
+ else lkShow(tr.querySelector('[data-k="ARTICLE_CODE"]'));}
+function refreshLk(){TABS.forEach(t=>[...tb(t).rows].forEach(tr=>markRow(t,tr)));}
+
+function refreshOrg(){TABS.forEach(t=>[...tb(t).rows].forEach(tr=>{const v=getVals(tr);
+ tr.querySelectorAll("select[data-k]").forEach(s=>{s.innerHTML=opts(T[t].cols.find(x=>x.k===s.dataset.k));});setVals(tr,v);}));
+ refreshLk();}
+orgSel.onchange=refreshOrg;
+
+function importFrom5(){
+ const have=new Set([...tb("p8").rows].map(tr=>getVals(tr).ARTICLE_CODE.trim()).filter(x=>x));
+ [...tb("p8").rows].forEach(tr=>{if(isEmpty(tr))tr.remove();});
+ let n=0;
+ [...tb("p5").rows].forEach(tr=>{const v=getVals(tr),code=normArt(v.ARTICLE_CODE);
+  if(!code||have.has(code))return;have.add(code);n++;
+  addRow("p8",{ARTICLE_CODE:code,UOM:v.UOM||"PCE",QUANTITY:"1",EAN:v.GTIN.trim()});});
+ renum("p8");$("msg_p8").textContent=n?"":"Ürün Kartı sekmesinde aktarılacak yeni ürün yok.";
+ $("ok_p8").textContent=n?n+" ürün aktarıldı (baştaki sıfırlar ürün kartındaki gibi silindi).":"";}
+
+function cellStr(v){if(v===null||v===undefined)return "";
+ if(typeof v==="number")return Number.isInteger(v)?BigInt(Math.round(v)).toString():String(v);
+ return String(v).trim();}
+function readSheet(file){return new Promise((res,rej)=>{
+ const name=file.name.toLowerCase();
+ if(name.endsWith(".csv")||name.endsWith(".txt")){file.arrayBuffer().then(b=>res(parseCSV(decode(b)))).catch(rej);return;}
+ if(typeof XLSX==="undefined"){rej("Excel okuyucu yüklenemedi (internet erişimi). Dosyayı CSV olarak kaydedip yükleyin.");return;}
+ file.arrayBuffer().then(b=>{const wb=XLSX.read(b,{type:"array"});const ws=wb.Sheets[wb.SheetNames[0]];
+  res(XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""}).map(r=>r.map(cellStr)));}).catch(rej);});}
+
+async function importExcel(t,inp){const file=inp.files[0];inp.value="";if(!file)return;
+ const m=$("msg_"+t),ok=$("ok_"+t);m.textContent="";ok.textContent="";
+ let rows;try{rows=await readSheet(file);}catch(e){m.textContent=String(e);return;}
+ rows=rows.filter(r=>r.some(x=>String(x).trim()!==""));
+ if(rows.length<2){m.textContent="Dosyada başlık satırından sonra veri yok.";return;}
+ const h=rows[0].map(x=>String(x).trim().toUpperCase()),map=T[t].xl,idx={},miss=[];
+ Object.keys(map).forEach(src=>{const i=h.indexOf(src);if(i<0)miss.push(src);else idx[map[src]]=i;});
+ if(idx.ARTICLE_CODE===undefined){m.textContent="Dosyada ARTICLE_CODE kolonu yok.";return;}
+ [...tb(t).rows].forEach(tr=>{if(isEmpty(tr))tr.remove();});
+ const byKey=new Map();
+ [...tb(t).rows].forEach(tr=>{const c=getVals(tr).ARTICLE_CODE.trim();if(c&&!byKey.has(c))byKey.set(c,tr);});
+ const seen=new Set(),dups=[];let add=0,upd=0;
+ rows.slice(1).forEach((r,i)=>{const v={};Object.keys(idx).forEach(k=>v[k]=String(r[idx[k]]??"").trim());
+  const code=v.ARTICLE_CODE;if(!code)return;
+  if(seen.has(code)){dups.push(code+" (satır "+(i+2)+")");return;}seen.add(code);
+  if(byKey.has(code)){setVals(byKey.get(code),v);markRow(t,byKey.get(code));upd++;}
+  else{addRow(t,v);add++;}});
+ renum(t);
+ ok.textContent=`${add} ürün eklendi, ${upd} ürün güncellendi.`+(miss.length?`\nDosyada bulunamayan kolonlar: ${miss.join(", ")}`:"");
+ if(dups.length)m.textContent="Dosyada tekrar eden ürün kodları (ilk satır alındı):\n"+dups.join("\n");}
+
+function applyFirst(t){const m=$("msg_"+t),ok=$("ok_"+t);m.textContent="";ok.textContent="";
+ const rows=[...tb(t).rows].filter(tr=>!isEmpty(tr));
+ if(rows.length<2){m.textContent="Uygulamak için en az iki dolu satır olmalı.";return;}
+ const skip=new Set(["ARTICLE_CODE",...Object.values(T[t].xl)]);
+ const f=getVals(rows[0]),cols=T[t].cols.filter(c=>!skip.has(c.k)&&f[c.k]!=="");
+ if(!cols.length){m.textContent="İlk satırda kopyalanacak alan yok (ürün kodu ve Excel'den gelen alanlar hariç).";return;}
+ if(!confirm(`${cols.map(c=>c.k).join(", ")} alanları ${rows.length-1} satıra kopyalanacak. Devam edilsin mi?`))return;
+ rows.slice(1).forEach(tr=>{const v={};cols.forEach(c=>v[c.k]=f[c.k]);setVals(tr,v);});
+ ok.textContent=`${cols.length} alan ${rows.length-1} satıra kopyalandı.`;}
+
+function validate(t){
+ const errs=[],warns=[],rows=[];const keys=new Map();const m=artMap(),p5=p5Codes();
+ [...tb(t).rows].forEach((tr,i)=>{tr.querySelectorAll(".err").forEach(e=>e.classList.remove("err"));
+  if(isEmpty(tr))return;
+  const v=getVals(tr),n=i+1,bad=(k,msg)=>{errs.push(`Satır ${n}: ${msg}`);const e=tr.querySelector(`[data-k="${k}"]`);if(e)e.classList.add("err");};
+  T[t].cols.forEach(c=>{const x=String(v[c.k]??"").trim();
+   if(c.req&&!x){bad(c.k,`${c.k} zorunlu`);return;}
+   if(!x)return;
+   if(x.includes("|")||x.includes('"'))bad(c.k,`${c.k} içinde | ya da " karakteri olamaz`);
+   if(c.max&&x.length>c.max)bad(c.k,`${c.k} en çok ${c.max} karakter (şu an ${x.length}) – sistem keserdi`);
+   if(c.t==="num"&&!/^\d+$/.test(x))bad(c.k,`${c.k} tam sayı olmalı`);
+   if(c.t==="dec"&&!/^\d+(\.\d+)?$/.test(x))bad(c.k,`${c.k} sayı olmalı, ondalık ayıraç nokta`);});
+  const code=v.ARTICLE_CODE.trim();
+  if(code&&/^0/.test(code))warns.push(`Satır ${n}: ${code} sıfırla başlıyor – Ürün Kartı baştaki sıfırları siler, Ürün Ölçü Kartı silmez; kodun sistemdeki haliyle aynı olduğundan emin olun`);
+  if(t==="p5"&&code&&ARTOK&&(m.has(code)||m.has(normArt(code))))warns.push(`Satır ${n}: ${code} sistemde zaten var – işlenmeyecek`);
+  if(t==="p8"&&code&&ARTOK&&!m.has(code)&&!p5.has(normArt(code)))bad("ARTICLE_CODE",`${code} sistemde ve Ürün Kartı sekmesinde yok`);
+  const key=T[t].uniq.map(k=>String(v[k]).trim()).join(" + ");
+  if(keys.has(key))bad(T[t].uniq[0],`${key} tekrar ediyor (satır ${keys.get(key)})`);else keys.set(key,n);
+  rows.push(v);});
+ if(!rows.length)errs.push("İndirilecek dolu satır yok.");
+ if(!curOrg())errs.push("Proje (ORG_CODE) seçilmedi.");
+ if(t==="p8"&&!ARTOK)warns.push("Ürün listesi yüklü değil: ürün kodları sistemle karşılaştırılmadı.");
+ return {errs,warns,rows};}
+
+function download(t,fmt){const m=$("msg_"+t),ok=$("ok_"+t),wm=$("wm_"+t);m.textContent="";ok.textContent="";wm.textContent="";
+ const {errs,warns,rows}=validate(t);
+ if(warns.length)wm.textContent="Uyarılar:\n"+warns.join("\n");
+ if(errs.length){m.textContent="Dosya indirilmedi, düzeltilmesi gerekenler:\n"+errs.join("\n");return;}
+ const head=["IORG_CODE",...T[t].cols.map(c=>c.k)];
+ const data=rows.map(v=>[curOrg(),...T[t].cols.map(c=>String(v[c.k]??"").trim())]);
+ const stamp=new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+ const base=`${DTR[t]}_${curOrg()}_${stamp}`;
+ if(fmt==="txt"){
+  const lines=(HEADER_ROW?[head]:[]).concat(data).map(r=>r.join("|"));
+  saveBlob(new Blob([lines.join("\r\n")+"\r\n"],{type:"text/plain;charset=utf-8"}),base+".txt");
+ }else{
+  if(typeof XLSX==="undefined"){m.textContent="Excel yazıcı yüklenemedi (internet erişimi). Dosyayı .txt olarak indirin.";return;}
+  const ws=XLSX.utils.aoa_to_sheet([head,...data].map(r=>r.map(x=>({t:"s",v:x}))));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,NM[t]);
+  XLSX.writeFile(wb,base+".xlsx");
+ }
+ ok.textContent=`${rows.length} satır indirildi (${NM[t]}, proje ${curOrg()}).`;}
+function saveBlob(b,name){const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
+
+TABS.forEach(t=>{header(t);addRow(t);});
+if(IS_C&&!ORG){alert("Müşteri sürümünde ORG ayarı boş. HTML'in başındaki ayar bloğuna proje kodunu yazın.");}
+loadDefault();
+</script>
+</body>
+</html>
