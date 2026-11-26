@@ -154,7 +154,7 @@ const NM={p5:"Ürün Kartı",p8:"Ürün Ölçü Kartı",p7:"Firma Kartı"};
 /* Otomatik okunacak lookup dosyaları (HTML ile aynı klasörde). Her grupta ilk bulunan okunur. */
 const SRC=IS_C
  ?{L:["YS19_Lookup_"+ORG+".csv","Lookup_"+ORG+".csv"],A:[],C:[]}
- :{L:["Lookup_Listeleri.csv","YS19_Lookup_Listeleri.csv"],A:["AMI_lookup.csv","YS19_Lookup_AMI.csv"],C:["VCMI_lookup.csv","YS19_Lookup_VCMI.csv"]};
+ :{L:["Lookup_Listeleri.csv","YS19_Lookup_Listeleri.csv"],A:["AMI_lookup.csv","YS19_Lookup_AMI.csv"],C:["VCMI_lookup.csv","YS19_Lookup_VCMI.csv","VCMI_lookup_1.csv","VCMI_lookup_2.csv","VCMI_lookup_3.csv","VCMI_lookup_4.csv","VCMI_lookup_5.csv"]};
 const KEY="ys19_dtr_lookup_"+MOD+"_"+(ORG||"ALL");
 const NOL=KEY+"_kaldirildi_liste";
 
@@ -226,7 +226,7 @@ const T={
   {k:"TAX_NUMBER",tr:"Vergi No",t:"text",c:"t",max:20},
   {k:"TELEPHONE_1",tr:"Telefon",t:"text",c:"t",max:30},
   {k:"E_INVOICE",tr:"E-Fatura",t:"sel",fix:EFT,max:1},
-  {k:"COMPANY_TYPE",tr:"Şirket Tipi",t:"sel",l:"COMPANY_TYPE",c:"t",max:20}
+  {k:"COMPANY_TYPE",tr:"Şirket Tipi",t:"text",c:"t",max:20},
   {k:"COUNTRY_CODE",tr:"Ülke",t:"sel",l:"COUNTRY",max:3,df:"TR"},
   {k:"DISTRICT",tr:"İlçe",t:"text",c:"t",max:40}]}
 };
@@ -361,7 +361,7 @@ function bigInfo(){
  ARTOK=BIG.A.ok;CMPOK=BIG.C.ok;
  refreshLk();}
 
-const decode=buf=>{let t=new TextDecoder("utf-8").decode(buf);if(t.includes("�"))t=new TextDecoder("windows-1254").decode(buf);return t;};
+const decode=buf=>{let t=new TextDecoder("utf-8").decode(buf);if(t.includes("\uFFFD"))t=new TextDecoder("windows-1254").decode(buf);return t;};
 
 async function fetchFirst(names){
  for(const f of names){
@@ -384,7 +384,11 @@ async function loadDefault(force){
   const fl=await fetchFirst(SRC.L);if(fl){try{ing(fl,D);}catch(e){}}
   for(const id of ["A","C"]){
    if(noB[id]||!SRC[id].length)continue;
-   const f=await fetchFirst(SRC[id]);if(f){try{ing(f,{});}catch(e){}}
+   for(const name of SRC[id]){
+    try{const res=await fetch(name+"?t="+Date.now(),{cache:"no-store"});
+     if(res.ok){$(BIG[id].el).textContent="Okunuyor: "+name+"...";
+      ing({name,text:decode(await res.arrayBuffer())},{});}}catch(e){console.error(name,e);}
+   }
   }
  }
  /* listeler */
