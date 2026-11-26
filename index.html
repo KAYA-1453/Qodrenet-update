@@ -105,7 +105,7 @@ const HEADER_ROW=true;   // indirilen .txt dosyasının ilk satırına kolon ba�
 const IS_C=MOD==="ALLC";
 const DTR={p5:MOD+"105",p8:MOD+"108"};          // dosya adında kullanılır
 const NM={p5:"Ürün Kartı",p8:"Ürün Ölçü Kartı"};
-const FILES=IS_C?["YS19_Lookup_"+ORG+".csv"]:["YS19_Lookup_Listeleri.csv","YS19_Lookup_AMI.csv"];
+const FILES=IS_C?["YS19_Lookup_"+ORG+".csv"]:["Lookup_Listeleri.csv","AMI_lookup.csv"];
 const KEY="ys19_dtr_lookup_"+MOD+"_"+(ORG||"ALL");
 
 const PTS=[["0","ÜTS Dışı"],["1","Lotlu Ürün"],["2","Serili Ürün"]];
@@ -236,7 +236,7 @@ function artInfo(){const n=Object.values(ART).reduce((s,m)=>s+m.size,0);
  info2.textContent=ARTOK?` • Ürün listesi: ${n.toLocaleString("tr-TR")} ürün`:" • Ürün listesi yüklü değil (ürün kontrolü yapılmaz)";
  refreshLk();}
 
-const decode=buf=>{let t=new TextDecoder("utf-8").decode(buf);if(t.includes("�"))t=new TextDecoder("windows-1254").decode(buf);return t;};
+const decode=buf=>{let t=new TextDecoder("utf-8").decode(buf);if(t.includes(" "))t=new TextDecoder("windows-1254").decode(buf);return t;};
 
 async function loadDefault(){
  const D={};let gotSmall=false;
