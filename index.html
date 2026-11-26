@@ -10,9 +10,14 @@ body{font-family:Segoe UI,Arial,sans-serif;font-size:13px;margin:16px;background
 h2{margin:0 0 10px}
 .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 button,.file{padding:6px 12px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
 button.p{background:#1f5fa8;color:#fff;border-color:#1f5fa8}
+button.rm{border-color:#b55;color:#a22}
 .file input{display:none}
 .file.x{background:#e8f3e8;border-color:#4a8a4a}
+.lk{background:#fff;border:1px solid #ccc;border-radius:4px;padding:8px;margin-bottom:10px}
+.lk .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:3px 0}
+.lk .lbl{font-weight:600;min-width:110px}
 .tabs{display:flex;gap:4px;margin:6px 0 0;flex-wrap:wrap}
 .tabs button{border-radius:6px 6px 0 0;border-bottom:none;background:#dde3ea;font-weight:600}
 .tabs button.on{background:#fff}
@@ -42,12 +47,28 @@ select{max-width:210px}
 </head>
 <body>
 <h2>WMS Sağlık – Quadronet Dosya Update<span class="mode" id="modeTag"></span></h2>
+
+<div class="lk">
+ <div class="row">
+  <span class="lbl">Listeler</span>
+  <span id="info">Listeler yükleniyor...</span>
+  <button class="rm" id="xL" onclick="clearLists()" title="Proje, ürün grubu, ülke vb. listeleri ve tarayıcıdaki kopyasını kaldırır">Listeleri kaldır</button>
+ </div>
+ <div class="row">
+  <span class="lbl">Ürün listesi</span>
+  <span id="info2">Yükleniyor...</span>
+  <button class="rm" id="xA" onclick="clearArt()" title="Sistemdeki ürün listesini ve tarayıcıdaki kopyasını kaldırır">Ürün listesini kaldır</button>
+ </div>
+ <div class="row">
+  <label class="file" title="Lookup dosyaları; birden fazla seçilebilir">Lookup dosyasını yükle<input type="file" id="lf" accept=".csv,.txt" multiple></label>
+  <button onclick="loadDefault(true)" title="HTML ile aynı yerdeki lookup dosyalarını yeniden okur">Otomatik yükle</button>
+  <span id="srcNote" style="font-size:11px;color:#777"></span>
+ </div>
+</div>
+
 <div class="bar">
- <label class="file" title="Lookup dosyaları; birden fazla seçilebilir">Lookup dosyasını yükle<input type="file" id="lf" accept=".csv,.txt" multiple></label>
- <span id="info">Listeler yükleniyor...</span>
- <span id="info2"></span>
- <label id="orgBox" style="margin-left:20px">ORG_CODE (Proje): <select id="org"></select></label>
- <span id="orgFix" style="margin-left:20px;font-weight:600"></span>
+ <label id="orgBox">ORG_CODE (Proje): <select id="org"></select></label>
+ <span id="orgFix" style="font-weight:600"></span>
 </div>
 <div class="tabs">
  <button id="tab_p5" class="on" onclick="showTab('p5')">Ürün Kartı</button>
@@ -105,14 +126,19 @@ const HEADER_ROW=true;   // indirilen .txt dosyasının ilk satırına kolon ba�
 const IS_C=MOD==="ALLC";
 const DTR={p5:MOD+"105",p8:MOD+"108"};          // dosya adında kullanılır
 const NM={p5:"Ürün Kartı",p8:"Ürün Ölçü Kartı"};
-const FILES=IS_C?["YS19_Lookup_"+ORG+".csv"]:["Lookup_Listeleri.csv","AMI_lookup.csv"];
+/* Otomatik okunacak lookup dosyaları (HTML ile aynı klasörde). Her grupta ilk bulunan okunur. */
+const SRC=IS_C
+ ?{L:["YS19_Lookup_"+ORG+".csv","Lookup_"+ORG+".csv"],A:[]}
+ :{L:["Lookup_Listeleri.csv","YS19_Lookup_Listeleri.csv"],A:["AMI_lookup.csv","YS19_Lookup_AMI.csv"]};
 const KEY="ys19_dtr_lookup_"+MOD+"_"+(ORG||"ALL");
+const AKEY=KEY+"_ami";
+const NOL=KEY+"_kaldirildi_liste", NOA=KEY+"_kaldirildi_urun";
 
 const PTS=[["0","ÜTS Dışı"],["1","Lotlu Ürün"],["2","Serili Ürün"]];
 const DDO=[["0","Karekodsuz"],["1","Karekodlu"]];
 let DATA={};
 const ART={};
-let ARTOK=false;
+let ARTOK=false, ASTAMP="";
 
 const T={
  p5:{uniq:["ARTICLE_CODE"],clear:["ARTICLE_CODE","ARTICLE_DESCRIPTION","OLD_ARTICLE_CODE","GTIN"],
@@ -159,10 +185,29 @@ const isXL=(t,k)=>Object.values(T[t].xl).includes(k);
 const curOrg=()=>IS_C?ORG:orgSel.value;
 const artMap=()=>ART[curOrg()]||new Map();
 const normArt=s=>String(s||"").trim().replace(/^0+/,"");
+const now=()=>new Date().toLocaleString("tr-TR");
 
 $("modeTag").textContent=IS_C?"Müşteri sürümü":"Operasyon sürümü";
 document.title="WMS Sağlık – Quadronet Dosya Update"+(IS_C?" – "+ORG:"");
 if(IS_C){$("orgBox").style.display="none";}
+$("srcNote").textContent="Otomatik okunan: "+[...SRC.L,...SRC.A].join(", ");
+
+/* ---------- Tarayıcı saklama (ürün listesi büyük olduğu için IndexedDB) ---------- */
+const IDB={db:null,
+ open(){if(this.db)return Promise.resolve(this.db);
+  return new Promise((res,rej)=>{if(!window.indexedDB){rej("IndexedDB yok");return;}
+   const r=indexedDB.open("ys19_quadronet",1);
+   r.onupgradeneeded=()=>r.result.createObjectStore("kv");
+   r.onsuccess=()=>{this.db=r.result;res(r.result);};r.onerror=()=>rej(r.error);});},
+ async run(mode,fn){const db=await this.open();
+  return new Promise((res,rej)=>{const tx=db.transaction("kv",mode);const q=fn(tx.objectStore("kv"));
+   tx.oncomplete=()=>res(q?q.result:undefined);tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error);});},
+ get(k){return this.run("readonly",s=>s.get(k));},
+ set(k,v){return this.run("readwrite",s=>s.put(v,k));},
+ del(k){return this.run("readwrite",s=>s.delete(k));}};
+const artToObj=A=>Object.fromEntries(Object.entries(A).map(([o,m])=>[o,[...m]]));
+const objToArt=o=>Object.fromEntries(Object.entries(o||{}).map(([k,v])=>[k,new Map(v)]));
+function setArt(A){Object.keys(ART).forEach(k=>delete ART[k]);Object.assign(ART,A);}
 
 function showTab(t){TABS.forEach(x=>{$("tab_"+x).classList.toggle("on",x===t);$("pane_"+x).classList.toggle("on",x===t);});}
 
@@ -195,7 +240,8 @@ function parseCSV(t){
  if(f!==""||row.length){row.push(f);rows.push(row);}
  return rows;}
 
-function ingest(rows,D){
+/* D: küçük listeler, A: ürün listesi (org -> Map) */
+function ingest(rows,D,A){
  const h=rows[0].map(x=>x.trim().toUpperCase());
  const iO=h.indexOf("ORG_CODE"),iL=h.indexOf("LISTE"),iK=h.indexOf("KOD"),iA=h.indexOf("ACIKLAMA");
  if([iO,iL,iK,iA].includes(-1))throw "Dosyada ORG_CODE, LISTE, KOD, ACIKLAMA kolonları bulunamadı.";
@@ -206,7 +252,7 @@ function ingest(rows,D){
   if(l==="SEVK_GENEL"){gen.push([k,a]);small++;continue;}
   if(!o)continue;
   if(IS_C&&o!==ORG)continue;
-  if(l==="ARTICLE"){(ART[o]=ART[o]||new Map()).set(String(k).trim(),a);art++;continue;}
+  if(l==="ARTICLE"){(A[o]=A[o]||new Map()).set(String(k).trim(),a);art++;continue;}
   D[o]=D[o]||{name:""};
   if(l==="ORG"){D[o].name=a;small++;continue;}
   (D[o][l]=D[o][l]||[]).push([k,a]);small++;}
@@ -218,55 +264,101 @@ function finish(D){
   gen.forEach(v=>{if(!seen.has(v[0])){s.push(v);seen.add(v[0]);}});x.SEVKONCELIK=s;});
  return D;}
 
-function applyData(D,stamp){
- DATA=D;
+function emptyMsg(state){
+ return (state==="kaldirildi"?"Listeler kaldırıldı.":"Listeler yüklenmedi.")+" 'Lookup dosyasını yükle' ya da 'Otomatik yükle' ile yükleyin.";}
+
+function applyData(D,stamp,state){
+ DATA=D;const n=Object.keys(D).length;
  if(IS_C){
   $("orgFix").textContent="Proje: "+ORG+(D[ORG]&&D[ORG].name?" – "+D[ORG].name:"");
-  info.textContent=D[ORG]?`Listeler yüklü (${stamp})`:`${ORG} projesinin listeleri dosyada yok.`;
+  info.textContent=!n?emptyMsg(state):(D[ORG]?`Yüklü (${stamp})`:`${ORG} projesinin listeleri dosyada yok.`);
  }else{
   const cur=orgSel.value;orgSel.innerHTML="";
   Object.keys(D).sort().forEach(o=>orgSel.add(new Option(o+" - "+D[o].name,o)));
   if(cur&&D[cur])orgSel.value=cur;
-  info.textContent=`Listeler yüklü: ${Object.keys(D).length} proje (${stamp})`;
+  info.textContent=n?`Yüklü: ${n} proje (${stamp})`:emptyMsg(state);
  }
+ $("xL").disabled=!n;
  refreshOrg();}
 
 function artInfo(){const n=Object.values(ART).reduce((s,m)=>s+m.size,0);
  ARTOK=n>0;
- info2.textContent=ARTOK?` • Ürün listesi: ${n.toLocaleString("tr-TR")} ürün`:" • Ürün listesi yüklü değil (ürün kontrolü yapılmaz)";
+ info2.textContent=ARTOK?`Yüklü: ${n.toLocaleString("tr-TR")} ürün (${ASTAMP})`
+  :(ASTAMP==="kaldirildi"?"Ürün listesi kaldırıldı (ürün kontrolü yapılmaz).":"Yüklü değil (ürün kontrolü yapılmaz).");
+ $("xA").disabled=!ARTOK;
  refreshLk();}
 
-const decode=buf=>{let t=new TextDecoder("utf-8").decode(buf);if(t.includes(" "))t=new TextDecoder("windows-1254").decode(buf);return t;};
+const decode=buf=>{let t=new TextDecoder("utf-8").decode(buf);if(t.includes("�"))t=new TextDecoder("windows-1254").decode(buf);return t;};
 
-async function loadDefault(){
- const D={};let gotSmall=false;
- for(const f of FILES){
-  try{const res=await fetch(f+"?t="+Date.now());if(!res.ok)continue;
-   const r=ingest(parseCSV(decode(await res.arrayBuffer())),D);if(r.small)gotSmall=true;}catch(e){}
+async function fetchFirst(names){
+ for(const f of names){
+  try{const res=await fetch(f+"?t="+Date.now(),{cache:"no-store"});
+   if(res.ok)return {name:f,text:decode(await res.arrayBuffer())};}catch(e){}
  }
- if(gotSmall){finish(D);const stamp=FILES[0]+" – otomatik";
+ return null;}
+
+/* Sayfa açılınca: HTML ile aynı yerdeki dosyaları okur; okuyamazsa tarayıcıdaki son kopyayı kullanır.
+   force=true: 'Otomatik yükle' butonu – kaldırılmış listeleri de yeniden yükler. */
+async function loadDefault(force){
+ if(force){localStorage.removeItem(NOL);localStorage.removeItem(NOA);}
+ const noL=!!localStorage.getItem(NOL),noA=!!localStorage.getItem(NOA);
+ info.textContent="Yükleniyor...";info2.textContent="Yükleniyor...";
+ const D={},A={};let small=0,art=0,lName="",aName="";
+ if(!(noL&&noA)){
+  const fl=await fetchFirst(SRC.L);
+  if(fl){try{const r=ingest(parseCSV(fl.text),D,A);small+=r.small;art+=r.art;if(r.small)lName=fl.name;if(r.art)aName=fl.name;}catch(e){}}
+  if(!noA&&SRC.A.length){
+   const fa=await fetchFirst(SRC.A);
+   if(fa){try{const r=ingest(parseCSV(fa.text),{},A);art+=r.art;if(r.art)aName=aName?aName+", "+fa.name:fa.name;}catch(e){}}
+  }
+ }
+ /* listeler */
+ if(noL){applyData({},"","kaldirildi");}
+ else if(small){finish(D);const stamp=lName+" – otomatik, "+now();
   try{localStorage.setItem(KEY,JSON.stringify({D,stamp}));}catch(e){}
   applyData(D,stamp);}
- else{
-  try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s){applyData(s.D,s.stamp+" – tarayıcıda saklı");}
-   else info.textContent="Listeler yüklenmedi. Lookup dosyasını seçin ("+FILES.join(", ")+").";}
-  catch(e){info.textContent="Listeler yüklenmedi. Lookup dosyasını seçin.";}
- }
- artInfo();}
+ else{let s=null;try{s=JSON.parse(localStorage.getItem(KEY)||"null");}catch(e){}
+  if(s)applyData(s.D,s.stamp+" – tarayıcıda saklı");else applyData({},"","yok");}
+ /* ürün listesi */
+ if(noA){setArt({});ASTAMP="kaldirildi";}
+ else if(art){setArt(A);ASTAMP=aName+" – otomatik, "+now();
+  try{await IDB.set(AKEY,{a:artToObj(A),stamp:ASTAMP});}catch(e){}}
+ else{try{const s=await IDB.get(AKEY);
+   if(s){setArt(objToArt(s.a));ASTAMP=s.stamp+" – tarayıcıda saklı";}else{setArt({});ASTAMP="";}}
+  catch(e){setArt({});ASTAMP="";}}
+ artInfo();
+ if(force&&!small&&!art)alert("Lookup dosyaları otomatik okunamadı ("+[...SRC.L,...SRC.A].join(", ")+").\n"
+  +"Dosyalar HTML ile aynı yerde olmalı. HTML bilgisayardan çift tıklanarak açıldıysa tarayıcı otomatik okumaya izin vermez; 'Lookup dosyasını yükle' ile seçin (bir kez seçmek yeter, tarayıcı saklar).");
+}
 
+/* Elle yükleme: seçilen dosyadaki liste satırları listeleri, ARTICLE satırları ürün listesini değiştirir */
 $("lf").onchange=async e=>{
  const files=[...e.target.files];if(!files.length)return;
- const D={};let gotSmall=false,msgs=[];
+ const D={},A={};let small=0,art=0;const msgs=[];
  for(const file of files){
-  try{const r=ingest(parseCSV(decode(await file.arrayBuffer())),D);
-   if(r.small)gotSmall=true;msgs.push(file.name+": "+r.small+" liste satırı, "+r.art+" ürün");}
+  try{const r=ingest(parseCSV(decode(await file.arrayBuffer())),D,A);
+   small+=r.small;art+=r.art;msgs.push(file.name+": "+r.small+" liste satırı, "+r.art+" ürün");}
   catch(err){msgs.push(file.name+": "+err);}
  }
- if(gotSmall){finish(D);const stamp=files.map(f=>f.name).join(", ")+" – "+new Date().toLocaleString("tr-TR");
-  try{localStorage.setItem(KEY,JSON.stringify({D,stamp}));}catch(err){}
-  applyData(D,stamp);}
+ const st=files.map(f=>f.name).join(", ")+" – "+now();
+ if(small){finish(D);localStorage.removeItem(NOL);
+  try{localStorage.setItem(KEY,JSON.stringify({D,stamp:st}));}catch(err){msgs.push("Listeler tarayıcıya kaydedilemedi; sayfa yenilenince yeniden yüklenmeli.");}
+  applyData(D,st);}
+ if(art){localStorage.removeItem(NOA);setArt(A);ASTAMP=st;
+  try{await IDB.set(AKEY,{a:artToObj(A),stamp:st});}catch(err){msgs.push("Ürün listesi tarayıcıya kaydedilemedi; sayfa yenilenince yeniden yüklenmeli.");}}
  artInfo();alert(msgs.join("\n"));
  e.target.value="";};
+
+/* Kaldırma */
+function clearLists(){
+ if(!confirm("Yüklenen listeler (proje, ürün grubu, ülke vb.) kaldırılsın mı?\n\nTablolardaki liste seçimleri boşalır, tarayıcıdaki kopya da silinir.\n'Otomatik yükle'ye basılana ya da dosya seçilene kadar listeler yeniden yüklenmez."))return;
+ localStorage.removeItem(KEY);localStorage.setItem(NOL,"1");
+ applyData({},"","kaldirildi");}
+async function clearArt(){
+ if(!confirm("Ürün listesi kaldırılsın mı?\n\nÜrün kontrolü ve ürün önerisi çalışmaz, tarayıcıdaki kopya da silinir.\n'Otomatik yükle'ye basılana ya da dosya seçilene kadar yeniden yüklenmez."))return;
+ try{await IDB.del(AKEY);}catch(e){}
+ localStorage.setItem(NOA,"1");setArt({});ASTAMP="kaldirildi";
+ artInfo();}
 
 function opts(c){const o=DATA[curOrg()];const L=c.fix||(o&&o[c.l||c.k])||[];
  return '<option value="">(boş)</option>'+L.map(([k,v])=>`<option value="${esc(k)}">${esc(String(k).trim()===""?"(boşluk)":k)}${v?" - "+esc(v):""}</option>`).join("");}
@@ -286,7 +378,7 @@ function copyLast(t){const r=[...tb(t).rows].reverse().find(x=>!isEmpty(x));if(!
  const n=addRow(t,v);(n.querySelector(t==="p8"?'[data-k="UOM"]':"input")).focus();}
 function renum(t){[...tb(t).rows].forEach((r,i)=>r.cells[0].textContent=i+1);$("cnt_"+t).textContent=tb(t).rows.length+" satır";}
 
-function p5Mark(inp){const v=inp.value.trim();inp.classList.remove("wrn");inp.title=tip(T.p5.cols[0],"p5");
+function p5Mark(inp){if(!inp)return;const v=inp.value.trim();inp.classList.remove("wrn");inp.title=tip(T.p5.cols[0],"p5");
  if(!v||!ARTOK)return;
  const m=artMap();
  if(m.has(v)||m.has(normArt(v))){inp.classList.add("wrn");inp.title="Bu ürün sistemde zaten var: "+(m.get(v)||m.get(normArt(v))||"")+" – bu satır işlenmez";}}
@@ -296,7 +388,7 @@ function lkInput(inp){const q=inp.value.trim().toUpperCase(),dl=$("dl_ARTICLE");
   if(k.toUpperCase().includes(q)||String(v).toUpperCase().includes(q)){out.push(`<option value="${esc(k)}">${esc(v)}</option>`);if(out.length>=50)break;}}
  dl.innerHTML=out.join("");lkShow(inp);}
 function p5Codes(){return new Set([...tb("p5").rows].map(tr=>normArt(getVals(tr).ARTICLE_CODE)).filter(x=>x));}
-function lkShow(inp){const sp=inp.nextElementSibling,v=inp.value.trim();sp.className="ds";sp.textContent="";
+function lkShow(inp){if(!inp)return;const sp=inp.nextElementSibling,v=inp.value.trim();sp.className="ds";sp.textContent="";
  if(!v)return;
  const m=artMap();
  if(m.has(v)){sp.textContent=m.get(v)||"✓ (açıklama yok)";sp.title=sp.textContent;return;}
@@ -382,7 +474,7 @@ function validate(t){
   if(keys.has(key))bad(T[t].uniq[0],`${key} tekrar ediyor (satır ${keys.get(key)})`);else keys.set(key,n);
   rows.push(v);});
  if(!rows.length)errs.push("İndirilecek dolu satır yok.");
- if(!curOrg())errs.push("Proje (ORG_CODE) seçilmedi.");
+ if(!curOrg())errs.push("Proje (ORG_CODE) seçilmedi – listeler yüklü değilse önce lookup dosyasını yükleyin.");
  if(t==="p8"&&!ARTOK)warns.push("Ürün listesi yüklü değil: ürün kodları sistemle karşılaştırılmadı.");
  return {errs,warns,rows};}
 
@@ -408,7 +500,7 @@ function saveBlob(b,name){const a=document.createElement("a");a.href=URL.createO
 
 TABS.forEach(t=>{header(t);addRow(t);});
 if(IS_C&&!ORG){alert("Müşteri sürümünde ORG ayarı boş. HTML'in başındaki ayar bloğuna proje kodunu yazın.");}
-loadDefault();
+loadDefault(false);
 </script>
 </body>
 </html>
