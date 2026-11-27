@@ -43,6 +43,7 @@ select{max-width:210px}
 .leg{font-size:11px;color:#555;margin-bottom:6px}
 .mode{font-size:11px;padding:2px 8px;border:1px solid #999;border-radius:10px;color:#333;margin-left:8px;vertical-align:middle;font-weight:400}
 #info,#info2,#info3{color:#555}
+.chk{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#2a8a2a;color:#fff;font-size:12px;font-weight:700;margin-right:6px;vertical-align:middle}
 
 #loginGate{position:fixed;inset:0;background:#eef1f5;display:flex;align-items:center;justify-content:center;z-index:9999}
 .lbox{background:#fff;border:1px solid #ccc;border-radius:8px;padding:24px;width:300px;box-shadow:0 4px 16px rgba(0,0,0,.1)}
@@ -71,9 +72,9 @@ select{max-width:210px}
 
 <div class="lk">
  <div class="row">
-  <span class="lbl">Listeler</span>
-  <span id="info">Listeler yükleniyor...</span>
-  <button class="rm" id="xL" onclick="clearLists()" title="Proje, ürün grubu, ülke vb. listeleri ve tarayıcıdaki kopyasını kaldırır">Listeleri kaldır</button>
+  <span class="lbl">Projeler</span>
+  <span id="info">Yükleniyor...</span>
+  <button class="rm" id="xL" onclick="clearLists()" title="Proje, ürün grubu, ülke vb. listeleri ve tarayıcıdaki kopyasını kaldırır">Projeleri kaldır</button>
  </div>
  <div class="row">
   <span class="lbl">Ürün listesi</span>
@@ -88,7 +89,6 @@ select{max-width:210px}
  <div class="row">
   <label class="file" title="Lookup dosyaları; birden fazla seçilebilir">Lookup dosyasını yükle<input type="file" id="lf" accept=".csv,.txt" multiple></label>
   <button onclick="loadDefault(true)" title="HTML ile aynı yerdeki lookup dosyalarını yeniden okur">Otomatik yükle</button>
-  <span id="srcNote" style="font-size:11px;color:#777"></span>
  </div>
 </div>
 
@@ -268,7 +268,6 @@ const now=()=>new Date().toLocaleString("tr-TR");
 $("modeTag").textContent=IS_C?"Müşteri sürümü":"Operasyon sürümü";
 document.title="WMS Sağlık – Quadronet Dosya Update"+(IS_C?" – "+ORG:"");
 if(IS_C){$("orgBox").style.display="none";}
-$("srcNote").textContent="Otomatik okunan: "+[...SRC.L,...SRC.A,...SRC.C].join(", ");
 
 /* ---------- Tarayıcı saklama (büyük listeler için IndexedDB) ---------- */
 const IDB={db:null,
@@ -359,18 +358,18 @@ function finish(D){
  return D;}
 
 function emptyMsg(state){
- return (state==="kaldirildi"?"Listeler kaldırıldı.":"Listeler yüklenmedi.")+" 'Lookup dosyasını yükle' ya da 'Otomatik yükle' ile yükleyin.";}
+ return (state==="kaldirildi"?"Projeler kaldırıldı.":"Projeler yüklenmedi.")+" 'Lookup dosyasını yükle' ya da 'Otomatik yükle' ile yükleyin.";}
 
 function applyData(D,stamp,state){
  DATA=D;const n=Object.keys(D).length;
  if(IS_C){
   $("orgFix").textContent="Proje: "+ORG+(D[ORG]&&D[ORG].name?" – "+D[ORG].name:"");
-  info.textContent=!n?emptyMsg(state):(D[ORG]?`Yüklü (${stamp})`:`${ORG} projesinin listeleri dosyada yok.`);
+  info.innerHTML=!n?esc(emptyMsg(state)):(D[ORG]?`<span class="chk" title="Yüklü">✓</span>Yüklü`:esc(`${ORG} projesinin listeleri dosyada yok.`));
  }else{
   const cur=orgSel.value;orgSel.innerHTML="";
   Object.keys(D).sort().forEach(o=>orgSel.add(new Option(o+" - "+D[o].name,o)));
   if(cur&&D[cur])orgSel.value=cur;
-  info.textContent=n?`Yüklü: ${n} proje (${stamp})`:emptyMsg(state);
+  info.innerHTML=n?`<span class="chk" title="Yüklü">✓</span>Yüklü (${n} proje)`:esc(emptyMsg(state));
  }
  $("xL").disabled=!n;
  refreshOrg();}
@@ -378,8 +377,8 @@ function applyData(D,stamp,state){
 function bigInfo(){
  ["A","C"].forEach(id=>{const b=BIG[id],n=Object.values(b.obj).reduce((s,m)=>s+m.size,0);
   b.ok=n>0;
-  $(b.el).textContent=b.ok?`Yüklü: ${n.toLocaleString("tr-TR")} ${b.unit} (${b.stamp})`
-   :(b.stamp==="kaldirildi"?`${b.name} kaldırıldı (${b.use} yapılmaz).`:`Yüklü değil (${b.use} yapılmaz).`);
+  $(b.el).innerHTML=b.ok?`<span class="chk" title="Yüklü">✓</span>Yüklü (${n.toLocaleString("tr-TR")} ${b.unit})`
+   :esc(b.stamp==="kaldirildi"?`${b.name} kaldırıldı (${b.use} yapılmaz).`:`Yüklü değil (${b.use} yapılmaz).`);
   $(b.btn).disabled=!b.ok;});
  ARTOK=BIG.A.ok;CMPOK=BIG.C.ok;
  refreshLk();}
@@ -409,7 +408,7 @@ async function loadDefault(force){
    if(noB[id]||!SRC[id].length)continue;
    for(const name of SRC[id]){
     try{const res=await fetch(name+"?t="+Date.now(),{cache:"no-store"});
-     if(res.ok){$(BIG[id].el).textContent="Okunuyor: "+name+"...";
+     if(res.ok){$(BIG[id].el).textContent="Yükleniyor...";
       ing({name,text:decode(await res.arrayBuffer())},{});}}catch(e){console.error(name,e);}
    }
   }
@@ -431,8 +430,8 @@ async function loadDefault(force){
    catch(e){setBig(id,{});b.stamp="";}}
  }
  bigInfo();
- if(force&&!cnt.small&&!cnt.A&&!cnt.C)alert("Lookup dosyaları otomatik okunamadı ("+[...SRC.L,...SRC.A,...SRC.C].join(", ")+").\n"
-  +"Dosyalar HTML ile aynı yerde olmalı. HTML bilgisayardan çift tıklanarak açıldıysa tarayıcı otomatik okumaya izin vermez; 'Lookup dosyasını yükle' ile seçin (bir kez seçmek yeter, tarayıcı saklar).");
+ if(force&&!cnt.small&&!cnt.A&&!cnt.C)alert("Lookup verileri otomatik okunamadı.\n"
+  +"HTML bilgisayardan çift tıklanarak açıldıysa tarayıcı otomatik okumaya izin vermez; 'Lookup dosyasını yükle' ile seçin (bir kez seçmek yeter, tarayıcı saklar).");
 }
 
 /* Elle yükleme: liste satırları listeleri, ürün satırları ürün listesini, firma satırları firma listesini değiştirir */
@@ -442,7 +441,7 @@ $("lf").onchange=async e=>{
  for(const file of files){
   try{const r=ingest(parseCSV(decode(await file.arrayBuffer())),D,X.A,X.C);
    small+=r.small;cnt.A+=r.art;cnt.C+=r.cmp;
-   msgs.push(`${file.name}: ${r.small} liste satırı, ${r.art} ürün, ${r.cmp} firma`);}
+   msgs.push(`Yüklendi: ${r.small} proje/liste satırı, ${r.art} ürün, ${r.cmp} firma`);}
   catch(err){msgs.push(file.name+": "+err);}
  }
  const st=files.map(f=>f.name).join(", ")+" – "+now();
@@ -457,7 +456,7 @@ $("lf").onchange=async e=>{
 
 /* Kaldırma */
 function clearLists(){
- if(!confirm("Yüklenen listeler (proje, ürün grubu, ülke vb.) kaldırılsın mı?\n\nTablolardaki liste seçimleri boşalır, tarayıcıdaki kopya da silinir.\n'Otomatik yükle'ye basılana ya da dosya seçilene kadar listeler yeniden yüklenmez."))return;
+ if(!confirm("Yüklenen projeler (proje, ürün grubu, ülke vb.) kaldırılsın mı?\n\nTablolardaki liste seçimleri boşalır, tarayıcıdaki kopya da silinir.\n'Otomatik yükle'ye basılana ya da dosya seçilene kadar listeler yeniden yüklenmez."))return;
  localStorage.removeItem(KEY);localStorage.setItem(NOL,"1");
  applyData({},"","kaldirildi");}
 async function clearBig(id){const b=BIG[id];
