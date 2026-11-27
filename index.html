@@ -165,8 +165,8 @@ select{max-width:210px}
 const MOD="ALLP";
 const ORG="";
 const HEADER_ROW=true;   // indirilen .txt dosyasının ilk satırına kolon başlıkları yazılsın mı
-/* Giriş kullanıcıları ("kullanici_adi": "sifre" biçiminde birden fazla ekleyebilirsiniz) */
-const USERS={"admin":"1234","operasyon":"wms2026"};
+/* Kullanıcı listesi dosyası (HTML ile aynı klasörde olmalı) */
+const USER_FILE="users.csv";
 /* Firma tipi (VC_FLAG) seçenekleri – açıklamalar operasyondan teyit edilince doldurulacak */
 const VCF=[["1",""],["4",""],["5",""],["6",""],["9",""]];
 /* ===================================================================== */
@@ -635,16 +635,34 @@ function startApp(){
  $("loginGate").style.display="none";
  if(!STARTED){STARTED=true;loadDefault(false);}
 }
-function doLogin(e){
+async function doLogin(e){
  e.preventDefault();
  const u=$("lu").value.trim(),p=$("lp").value;
- if(Object.prototype.hasOwnProperty.call(USERS,u)&&USERS[u]===p){
-  sessionStorage.setItem(AUTH_KEY,u);
-  $("lerr").textContent="";
-  $("lp").value="";
-  startApp();
- }else{
-  $("lerr").textContent="Kullanıcı adı veya şifre hatalı.";
+ const btn=e.target.querySelector("button");
+ $("lerr").textContent="";
+ btn.disabled=true;btn.textContent="Kontrol ediliyor...";
+ try{
+  const res=await fetch(USER_FILE+"?t="+Date.now(),{cache:"no-store"});
+  if(!res.ok)throw "Kullanıcı dosyası ("+USER_FILE+") bulunamadı.";
+  const rows=parseCSV(decode(await res.arrayBuffer())).filter(r=>r.some(x=>String(x).trim()!==""));
+  const map=new Map();
+  rows.forEach((r,i)=>{
+   const k=(r[0]||"").trim(),v=(r[1]||"").trim();
+   if(!k)return;
+   if(i===0&&["KULLANICI_ADI","USER","USERNAME","KOD"].includes(k.toUpperCase()))return;
+   map.set(k,v);
+  });
+  if(map.has(u)&&map.get(u)===p){
+   sessionStorage.setItem(AUTH_KEY,u);
+   $("lp").value="";
+   startApp();
+  }else{
+   $("lerr").textContent="Kullanıcı adı veya şifre hatalı.";
+  }
+ }catch(err){
+  $("lerr").textContent=typeof err==="string"?err:"Kullanıcı listesi okunamadı.";
+ }finally{
+  btn.disabled=false;btn.textContent="Giriş Yap";
  }
 }
 function doLogout(){
