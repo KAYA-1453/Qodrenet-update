@@ -43,10 +43,31 @@ select{max-width:210px}
 .leg{font-size:11px;color:#555;margin-bottom:6px}
 .mode{font-size:11px;padding:2px 8px;border:1px solid #999;border-radius:10px;color:#333;margin-left:8px;vertical-align:middle;font-weight:400}
 #info,#info2,#info3{color:#555}
+
+#loginGate{position:fixed;inset:0;background:#eef1f5;display:flex;align-items:center;justify-content:center;z-index:9999}
+.lbox{background:#fff;border:1px solid #ccc;border-radius:8px;padding:24px;width:300px;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+.lbox h3{margin:0 0 14px;font-size:16px;color:#1f5fa8}
+.lbox label{display:block;font-size:12px;font-weight:600;margin:8px 0 4px}
+.lbox input{width:100%;box-sizing:border-box;padding:7px;font-size:13px}
+.lbox button{width:100%;margin-top:14px;padding:8px;font-weight:600}
+.lerr{color:#c00;font-size:12px;margin-top:8px;min-height:16px}
+.logout{float:right;font-size:12px;font-weight:400}
 </style>
 </head>
 <body>
-<h2>WMS Sağlık – Quadronet Dosya Update<span class="mode" id="modeTag"></span></h2>
+<div id="loginGate">
+ <form class="lbox" onsubmit="doLogin(event)">
+  <h3>WMS Sağlık – Giriş</h3>
+  <label for="lu">Kullanıcı Adı</label>
+  <input id="lu" type="text" autocomplete="username" required autofocus>
+  <label for="lp">Şifre</label>
+  <input id="lp" type="password" autocomplete="current-password" required>
+  <button type="submit" class="p">Giriş Yap</button>
+  <div class="lerr" id="lerr"></div>
+ </form>
+</div>
+
+<h2>WMS Sağlık – Quadronet Dosya Update<span class="mode" id="modeTag"></span><button class="rm logout" onclick="doLogout()">Çıkış Yap</button></h2>
 
 <div class="lk">
  <div class="row">
@@ -144,6 +165,8 @@ select{max-width:210px}
 const MOD="ALLP";
 const ORG="";
 const HEADER_ROW=true;   // indirilen .txt dosyasının ilk satırına kolon başlıkları yazılsın mı
+/* Giriş kullanıcıları ("kullanici_adi": "sifre" biçiminde birden fazla ekleyebilirsiniz) */
+const USERS={"admin":"1234","operasyon":"wms2026"};
 /* Firma tipi (VC_FLAG) seçenekleri – açıklamalar operasyondan teyit edilince doldurulacak */
 const VCF=[["1",""],["4",""],["5",""],["6",""],["9",""]];
 /* ===================================================================== */
@@ -607,7 +630,30 @@ function saveBlob(b,name){const a=document.createElement("a");a.href=URL.createO
 
 TABS.forEach(t=>{header(t);addRow(t);});
 if(IS_C&&!ORG){alert("Müşteri sürümünde ORG ayarı boş. HTML'in başındaki ayar bloğuna proje kodunu yazın.");}
-loadDefault(false);
+const AUTH_KEY="ys19_auth_ok";
+let STARTED=false;
+function startApp(){
+ $("loginGate").style.display="none";
+ if(!STARTED){STARTED=true;loadDefault(false);}
+}
+function doLogin(e){
+ e.preventDefault();
+ const u=$("lu").value.trim(),p=$("lp").value;
+ if(Object.prototype.hasOwnProperty.call(USERS,u)&&USERS[u]===p){
+  sessionStorage.setItem(AUTH_KEY,u);
+  $("lerr").textContent="";
+  $("lp").value="";
+  startApp();
+ }else{
+  $("lerr").textContent="Kullanıcı adı veya şifre hatalı.";
+ }
+}
+function doLogout(){
+ sessionStorage.removeItem(AUTH_KEY);
+ $("loginGate").style.display="flex";
+ $("lu").focus();
+}
+if(sessionStorage.getItem(AUTH_KEY)){startApp();}
 </script>
 </body>
 </html>
